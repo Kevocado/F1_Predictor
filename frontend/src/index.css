@@ -1,0 +1,86 @@
+@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700;900&family=Inter:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Titillium Web", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /* Carbon-fibre black base, tonal ramp toward the surface colors. */
+  --color-f1-950: #08090b;
+  --color-f1-900: #0e1013;
+  --color-f1-850: #15171b;
+  --color-f1-800: #1c1f24;
+  --color-f1-700: #262a31;
+  --color-f1-600: #363b44;
+  --color-f1-border: #2a2e35;
+
+  /* F1 red accent. */
+  --color-f1-red: #e10600;
+  --color-f1-red-soft: #ff2e26;
+  --color-f1-gold: #d4a72c;
+
+  --color-f1-text: #f2f3f5;
+  --color-f1-text-dim: #a9adb6;
+  --color-f1-text-faint: #6d7280;
+
+  --color-win: #22c55e;
+  --color-podium: #d4a72c;
+  --color-dnf: #ef4444;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 10% -10%, #2a0c0c 0%, transparent 40%),
+    radial-gradient(circle at 100% 0%, #1a1015 0%, transparent 35%),
+    var(--color-f1-950);
+  min-height: 100vh;
+  color: var(--color-f1-text);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-f1-red);
+  color: white;
+}
+
+/* One angled corner cut on cards — a small nod to F1's sharp livery panel
+   lines, applied as a utility rather than baked into every component. */
+.clip-corner {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+}
+
+.clip-corner-lg {
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-f1-700);
+  border-radius: 6px;
+}

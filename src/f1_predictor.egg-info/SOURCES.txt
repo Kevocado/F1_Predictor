@@ -1,0 +1,10 @@
+pyproject.toml
+src/f1_predictor/__init__.py
+src/f1_predictor/config.py
+src/f1_predictor.egg-info/PKG-INFO
+src/f1_predictor.egg-info/SOURCES.txt
+src/f1_predictor.egg-info/dependency_links.txt
+src/f1_predictor.egg-info/requires.txt
+src/f1_predictor.egg-info/top_level.txt
+src/f1_predictor/data/__init__.py
+src/f1_predictor/data/jolpica.py

@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/cache/
+data/tracking.db
+models/*.json
+models/*.pkl
+models/*.ubj
+.env
+node_modules/
+frontend/dist/
+.DS_Store
