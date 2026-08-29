@@ -1,0 +1,130 @@
+{
+  "trained_at": "2026-08-23T23:39:36.871297+00:00",
+  "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "feature_cols": [
+    "elo_pre_race",
+    "team_strength_pre_race",
+    "team_form_avg_position_3",
+    "team_form_points_3",
+    "form_avg_position_3",
+    "form_avg_points_3",
+    "form_dnf_rate_3",
+    "form_avg_position_5",
+    "form_avg_points_5",
+    "form_dnf_rate_5",
+    "form_avg_position_10",
+    "form_avg_points_10",
+    "form_dnf_rate_10",
+    "driver_circuit_avg_position",
+    "driver_circuit_avg_points",
+    "constructor_circuit_avg_position",
+    "circuit_dnf_rate",
+    "grid",
+    "quali_position",
+    "quali_gap_to_pole",
+    "temp_max_c",
+    "precipitation_mm",
+    "wind_max_kph"
+  ],
+  "race_outcome_candidate": "xgb_ranker",
+  "tuned_ranker_params": {
+    "max_depth": 6,
+    "learning_rate": 0.1919442132715109,
+    "n_estimators": 399,
+    "subsample": 0.9865882029496039,
+    "colsample_bytree": 0.7974063825318295,
+    "min_child_weight": 7,
+    "reg_lambda": 9.358164843484554,
+    "reg_alpha": 0.4606956059572878
+  },
+  "tuned_dnf_params": {
+    "max_depth": 2,
+    "learning_rate": 0.011281629119423008,
+    "n_estimators": 136,
+    "subsample": 0.9075048243488445,
+    "colsample_bytree": 0.9598738212384893,
+    "min_child_weight": 3,
+    "reg_lambda": 0.015013182315032979
+  },
+  "race_outcome_candidate_metrics": {
+    "elo_last_fold_log_loss": 0.16391805162331802,
+    "xgb_ranker_last_fold_log_loss": 0.11378643439082152,
+    "elo_mean_log_loss": 0.13849488565886423,
+    "xgb_ranker_mean_log_loss": 0.1302799075943298
+  },
+  "walk_forward_folds": {
+    "elo": [
+      {
+        "val_season": 2022,
+        "n_races": 22,
+        "log_loss": 0.14064640123813021,
+        "brier": 0.04145257525252525
+      },
+      {
+        "val_season": 2023,
+        "n_races": 22,
+        "log_loss": 0.10119592805451755,
+        "brier": 0.029364424242424244
+      },
+      {
+        "val_season": 2024,
+        "n_races": 24,
+        "log_loss": 0.1480620374365294,
+        "brier": 0.04141920575272558
+      },
+      {
+        "val_season": 2025,
+        "n_races": 24,
+        "log_loss": 0.13865200994182586,
+        "brier": 0.0406955894224078
+      },
+      {
+        "val_season": 2026,
+        "n_races": 12,
+        "log_loss": 0.16391805162331802,
+        "brier": 0.044653624579124584
+      }
+    ],
+    "xgb_ranker": [
+      {
+        "val_season": 2022,
+        "n_races": 22,
+        "log_loss": 0.1598700577894407,
+        "brier": 0.0449459191919192
+      },
+      {
+        "val_season": 2023,
+        "n_races": 22,
+        "log_loss": 0.11731367410817543,
+        "brier": 0.03299256363636363
+      },
+      {
+        "val_season": 2024,
+        "n_races": 24,
+        "log_loss": 0.14284263064510558,
+        "brier": 0.039819970772442585
+      },
+      {
+        "val_season": 2025,
+        "n_races": 24,
+        "log_loss": 0.11758674103810585,
+        "brier": 0.034586595685455815
+      },
+      {
+        "val_season": 2026,
+        "n_races": 12,
+        "log_loss": 0.11378643439082152,
+        "brier": 0.03295354882154882
+      }
+    ]
+  }
+}
