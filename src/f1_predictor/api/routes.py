@@ -11,15 +11,16 @@ import time
 
 import pandas as pd
 import xgboost as xgb
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ..config import CURRENT_SEASON
+from ..config import CURRENT_SEASON, PUBLIC_MODE
 from ..data import jolpica
 from ..evaluate import backtest as backtest_lib
 from ..features import build as build_features
 from ..features import session_state
 from ..models import championship_projection
 from ..models import dnf as dnf_model
+from ..models import explain as explain_lib
 from ..models import manifest as manifest_module
 from ..models import race_outcome
 from ..tracking import store
@@ -27,6 +28,9 @@ from .schemas import (
     ChampionshipEntry,
     ChampionshipResponse,
     DriverPrediction,
+    ExplainResponse,
+    FeatureContribution,
+    RaceAccuracyEntry,
     RacePredictionResponse,
     RaceSummary,
     TrackRecordEntry,
@@ -34,6 +38,17 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _admin_only() -> None:
+    """Dependency for the one state-changing endpoint (retrain) — 404s it
+    unconditionally on the public deployment, even with a correct guest
+    password (auth.py's GuestAuthMiddleware gates *access to the app*, not
+    admin privilege within it). Pretending the route doesn't exist, rather
+    than 403, avoids advertising an admin surface to a public visitor at
+    all. Ported verbatim from PL_Predictor's routes.py."""
+    if PUBLIC_MODE:
+        raise HTTPException(status_code=404)
 
 _CACHE_TTL_SECONDS = 1800
 # Race schedule/results genuinely change within minutes on a race weekend —
@@ -69,12 +84,11 @@ def _load_models() -> tuple[str, xgb.XGBRanker | None, xgb.XGBClassifier]:
     return candidate, ranker, dnf_clf
 
 
-def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tuple[pd.DataFrame, str]:
-    """A race that hasn't happened yet: predicted with the production
-    manifest model directly (already trained on all history through the
-    most recently completed race — no per-request retraining needed),
-    plus real qualifying data merged in if this weekend has already
-    qualified but not yet raced."""
+def _future_feature_frame(season: int, round_: int, race_row: pd.Series) -> tuple[pd.DataFrame, str]:
+    """The feature frame for a race that hasn't happened yet, shared by
+    the prediction path and the explain path: current elo/team-strength/
+    rolling-form snapshots, plus real qualifying data merged in if this
+    weekend has already qualified but not yet raced."""
     tier = session_state.current_tier(race_row)
 
     schedule = jolpica.fetch_season_schedule(season)
@@ -96,6 +110,14 @@ def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tup
             # qualifying position is the best available pre-race estimate.
             future_df["grid"] = future_df["quali_position"]
 
+    return future_df, tier
+
+
+def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tuple[pd.DataFrame, str]:
+    """A race that hasn't happened yet: predicted with the production
+    manifest model directly (already trained on all history through the
+    most recently completed race — no per-request retraining needed)."""
+    future_df, tier = _future_feature_frame(season, round_, race_row)
     candidate, ranker, dnf_clf = _load_models()
     if candidate == "xgb_ranker":
         scores = race_outcome.xgb_scores_for_race(ranker, future_df, build_features.FEATURE_COLUMNS)
@@ -142,6 +164,36 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
     return result, session_state.TIER_POST_QUALIFYING, "backtest"
 
 
+def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFrame, list[str]]:
+    """The feature row(s) for explain_prediction — always built from the
+    CURRENT production model's training frame, not evaluate/backtest.py's
+    no-lookahead retrain (that discipline exists for honest accuracy
+    scoring; explain shows what the deployed model actually attributes,
+    so using it directly is correct here, and much cheaper — no retrain
+    per request)."""
+    schedule = jolpica.fetch_season_schedule(season)
+    race_rows = schedule[schedule["round"] == round_]
+    if race_rows.empty:
+        raise HTTPException(status_code=404, detail=f"No such race: {season} round {round_}")
+    race_row = race_rows.iloc[0]
+    now = pd.Timestamp.now(tz="UTC")
+    completed = pd.notna(race_row["race_datetime"]) and race_row["race_datetime"] <= now
+
+    if completed:
+        df, feature_cols = _cached(
+            f"explain_frame_{season}",
+            lambda: build_features.build_training_frame(seasons=jolpica.default_seasons()),
+            ttl=_CACHE_TTL_SECONDS,
+        )
+        race_df = df[
+            (df["season"] == season) & (df["round"] == round_) & (df["tier"] == session_state.TIER_POST_QUALIFYING)
+        ]
+        return race_df, feature_cols
+
+    future_df, _tier = _future_feature_frame(season, round_, race_row)
+    return future_df, build_features.FEATURE_COLUMNS
+
+
 @router.get("/races", response_model=list[RaceSummary])
 def list_races(season: int | None = None) -> list[RaceSummary]:
     season = season or CURRENT_SEASON
@@ -164,6 +216,13 @@ def list_races(season: int | None = None) -> list[RaceSummary]:
     return out
 
 
+def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, completed: bool) -> tuple[pd.DataFrame, str, str]:
+    if completed:
+        return _completed_race_prediction(season, round_)
+    sim, tier = _predict_upcoming_race(season, round_, race_row)
+    return sim, tier, "live"
+
+
 @router.get("/races/{season}/{round_}/prediction", response_model=RacePredictionResponse)
 def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
     schedule = jolpica.fetch_season_schedule(season)
@@ -174,11 +233,19 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
     now = pd.Timestamp.now(tz="UTC")
     completed = pd.notna(race_row["race_datetime"]) and race_row["race_datetime"] <= now
 
-    if completed:
-        sim, tier, source = _completed_race_prediction(season, round_)
-    else:
-        sim, tier = _predict_upcoming_race(season, round_, race_row)
-        source = "live"
+    # Uncached, this rebuilt the whole future-feature frame (elo/team-
+    # strength replay across the season) on every request for an upcoming
+    # race, and for a completed race with no tracked snapshot, fell
+    # through to backtest_race — which re-trains a real model on a
+    # multi-season frame *per request*. Confirmed directly (not assumed)
+    # while porting PL_Predictor's PUBLIC_MODE pattern here: PL_Predictor's
+    # own OOM was caused by exactly this shape of per-request rebuild
+    # bypassing an otherwise-present cache.
+    sim, tier, source = _cached(
+        f"race_prediction_{season}_{round_}",
+        lambda: _race_prediction_bundle(season, round_, race_row, completed),
+        ttl=_LIVE_CACHE_TTL_SECONDS,
+    )
 
     predictions = []
     for _, r in sim.iterrows():
@@ -200,6 +267,40 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
 
     return RacePredictionResponse(
         season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions
+    )
+
+
+@router.get("/races/{season}/{round_}/explain", response_model=ExplainResponse)
+def explain_prediction(season: int, round_: int, driver_id: str) -> ExplainResponse:
+    """What's driving this driver's prediction — one explanation for
+    Win/Podium/Points-finish (they're derived from the same strength
+    score, see models/explain.py), a separate one for DNF."""
+    race_df, feature_cols = _race_feature_frame_for_explain(season, round_)
+    driver_row = race_df[race_df["driver_id"] == driver_id]
+    if driver_row.empty:
+        raise HTTPException(
+            status_code=404, detail=f"No feature row for driver '{driver_id}' in {season} round {round_}"
+        )
+
+    candidate, ranker, dnf_clf = _load_models()
+    if candidate == "xgb_ranker":
+        strength_contribs = explain_lib.explain_strength_xgb(ranker, driver_row, feature_cols)
+        strength_cols = feature_cols
+    else:
+        strength_contribs = explain_lib.explain_strength_elo(driver_row)
+        strength_cols = ["elo_pre_race", "team_strength_pre_race"]
+    dnf_contribs = explain_lib.explain_dnf(dnf_clf, driver_row, feature_cols)
+
+    strength_top = explain_lib.top_contributors(strength_contribs.iloc[0], driver_row.iloc[0], strength_cols)
+    dnf_top = explain_lib.top_contributors(dnf_contribs.iloc[0], driver_row.iloc[0], feature_cols)
+
+    return ExplainResponse(
+        season=season,
+        round=round_,
+        driver_id=driver_id,
+        candidate=candidate,
+        strength_contributors=[FeatureContribution(**c) for c in strength_top],
+        dnf_contributors=[FeatureContribution(**c) for c in dnf_top],
     )
 
 
@@ -228,14 +329,22 @@ def get_track_record(tier: str | None = None) -> TrackRecordResponse:
     )
 
 
+@router.get("/track-record/by-race", response_model=list[RaceAccuracyEntry])
+def get_race_accuracy(tier: str | None = None) -> list[RaceAccuracyEntry]:
+    return [RaceAccuracyEntry(**row) for row in store.get_race_accuracy(tier=tier)]
+
+
 @router.get("/live/current")
 def get_live_current() -> dict:
-    """Phase 3 stub — the live in-race engine (requirement 3) polls
-    OpenF1 and serves from an in-process cache here once built."""
-    return {"live": False}
+    """Requirement 3: served from models/live_poller.py's in-process
+    cache, updated by the background poller started in api/main.py's
+    lifespan hook every ~18s while a Race session is actually live."""
+    from ..models import live_poller
+
+    return live_poller.get_cached()
 
 
-@router.post("/retrain")
+@router.post("/retrain", dependencies=[Depends(_admin_only)])
 def retrain() -> dict:
     manifest = manifest_module.train_all()
     _cache.clear()
