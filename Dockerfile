@@ -1,8 +1,8 @@
-# Public, password-gated F1 Predictor deployment — one image serving the
-# built React frontend and the FastAPI backend from a single process/origin
-# (see api/main.py's StaticFiles mount and api/auth.py's GuestAuthMiddleware).
-# Ported directly from PL_Predictor's own Dockerfile/PUBLIC_MODE pattern.
-# The private/full app (npm run dev + uvicorn --reload, no PUBLIC_MODE) is
+# Public F1 Predictor deployment — one image serving the built React
+# frontend and the FastAPI backend from a single process/origin (see
+# api/main.py's StaticFiles mount). Read-only, no login gate — ported
+# directly from PL_Predictor's own Dockerfile/PUBLIC_MODE pattern. The
+# private/full app (npm run dev + uvicorn --reload, no PUBLIC_MODE) is
 # untouched by this file — it's only used for the public deployment.
 
 FROM node:20-slim AS frontend-build
@@ -39,6 +39,15 @@ RUN pip install --no-cache-dir -e .
 # tuning-only tooling state, not a serving artifact — deliberately not
 # shipped.
 COPY models/manifest.json models/dnf_model.json models/live_win_model.json models/live_podium_model.json models/race_outcome_ranker.json ./models/
+
+# Ships the immutable past-season (2019-2025) jolpica cache — confirmed via
+# a real production 429 that a cold container (Render's disk is ephemeral;
+# every restart starts with zero cache) refetching ~300+ requests worth of
+# historical results from jolpica's API is a real rate-limit risk, not a
+# theoretical one. These seasons are over and their results never change,
+# so this is safe to ship once. See .dockerignore for what's excluded from
+# this (the current, still-growing season is fetched live, same as today).
+COPY data/cache/jolpica/ ./data/cache/jolpica/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000

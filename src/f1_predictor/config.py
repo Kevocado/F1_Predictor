@@ -13,12 +13,13 @@ CACHE_DIR = DATA_DIR / "cache"
 MODELS_DIR = PROJECT_ROOT / "models"
 FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
 
-# Public, password-gated read-only deployment (see api/auth.py) — unset/false
-# everywhere else, which reproduces this app's original private-network-only
-# behavior exactly (api/main.py's own CORS comment). Never set GUEST_PASSWORD
-# in a committed file; it's provided as a hosting-platform secret.
+# Public, read-only deployment — unset/false everywhere else, which
+# reproduces this app's original private-network-only behavior exactly
+# (api/main.py's own CORS comment). No login gate: the public deployment
+# has no admin surface reachable at all (routes.py::_admin_only 404s the
+# one write endpoint regardless), so there's nothing a password would
+# protect.
 PUBLIC_MODE = os.getenv("PUBLIC_MODE", "false").lower() == "true"
-GUEST_PASSWORD = os.getenv("GUEST_PASSWORD")
 
 JOLPICA_CACHE_DIR = CACHE_DIR / "jolpica"
 FASTF1_CACHE_DIR = CACHE_DIR / "fastf1"

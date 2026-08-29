@@ -9,8 +9,25 @@ build
 dist
 
 .env
-data/cache
 data/tracking.db
+
+# data/cache is otherwise ephemeral generated state, EXCEPT the immutable
+# past-season jolpica cache (2019-2025 results never change once a season
+# is over) — shipping it avoids refetching ~300+ requests from jolpica's
+# API on every cold container start, which is what caused real 429s in
+# production (Render's disk is ephemeral, so a fresh container normally
+# starts with zero cache). The current season's cache is deliberately
+# NOT shipped here — it grows every race weekend, so it's fetched live.
+data/cache/*
+!data/cache/jolpica
+data/cache/jolpica/*
+!data/cache/jolpica/2019_*.json
+!data/cache/jolpica/2020_*.json
+!data/cache/jolpica/2021_*.json
+!data/cache/jolpica/2022_*.json
+!data/cache/jolpica/2023_*.json
+!data/cache/jolpica/2024_*.json
+!data/cache/jolpica/2025_*.json
 
 notebooks
 docs

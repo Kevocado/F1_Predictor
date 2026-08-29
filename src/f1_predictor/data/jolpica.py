@@ -62,7 +62,21 @@ def _get(path: str, params: dict | None = None, attempts: int = 3, backoff: floa
             resp = requests.get(url, params=params, headers=headers, timeout=15)
             resp.raise_for_status()
             return resp.json()
-        except Exception as exc:  # noqa: BLE001 - retry on any transient fetch failure
+        except requests.exceptions.HTTPError as exc:
+            last_err = exc
+            # Confirmed live in production: a cold container (Render's disk
+            # is ephemeral) refetching a full season's worth of history can
+            # burn through jolpica's hourly quota. A 429 means "come back
+            # later," not "retry immediately" — respect Retry-After when
+            # given, and back off much longer than the generic case below
+            # rather than giving up after a few seconds and surfacing a 500.
+            if exc.response is not None and exc.response.status_code == 429 and attempt < attempts - 1:
+                retry_after = exc.response.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else 30.0 * (attempt + 1)
+                time.sleep(wait)
+            elif attempt < attempts - 1:
+                time.sleep(backoff * (attempt + 1))
+        except Exception as exc:  # noqa: BLE001 - retry on any other transient fetch failure
             last_err = exc
             if attempt < attempts - 1:
                 time.sleep(backoff * (attempt + 1))

@@ -42,11 +42,9 @@ router = APIRouter(prefix="/api")
 
 def _admin_only() -> None:
     """Dependency for the one state-changing endpoint (retrain) — 404s it
-    unconditionally on the public deployment, even with a correct guest
-    password (auth.py's GuestAuthMiddleware gates *access to the app*, not
-    admin privilege within it). Pretending the route doesn't exist, rather
-    than 403, avoids advertising an admin surface to a public visitor at
-    all. Ported verbatim from PL_Predictor's routes.py."""
+    unconditionally on the public deployment. Pretending the route doesn't
+    exist, rather than 403, avoids advertising an admin surface to a
+    public visitor at all. Ported verbatim from PL_Predictor's routes.py."""
     if PUBLIC_MODE:
         raise HTTPException(status_code=404)
 

@@ -16,7 +16,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..config import FRONTEND_DIST_DIR
-from .auth import GuestAuthMiddleware
 from .routes import router
 
 
@@ -40,16 +39,16 @@ app = FastAPI(title="F1 Predictor API", lifespan=lifespan)
 
 # Wide open on purpose: this server is only ever meant to be reached over a
 # private network — never exposed to the public internet — so there's no
-# real origin to restrict to. The one deliberate exception is the public,
-# password-gated deployment (see auth.py) — GuestAuthMiddleware, not CORS,
-# is what protects that one (same approach as PL_Predictor's api/main.py).
+# real origin to restrict to. The public deployment is read-only with no
+# admin surface reachable at all (see routes.py::_admin_only) — there's
+# nothing left for a login to protect, so it's a plain public site with
+# no guest password (same approach as PL_Predictor's api/main.py).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(GuestAuthMiddleware)
 
 app.include_router(router)
 
