@@ -23,6 +23,21 @@ export interface DriverPrediction {
   actual_dnf: boolean | null;
 }
 
+export interface FeatureContribution {
+  feature: string;
+  value: number | null;
+  contribution: number;
+}
+
+export interface ExplainResponse {
+  season: number;
+  round: number;
+  driver_id: string;
+  candidate: string;
+  strength_contributors: FeatureContribution[];
+  dnf_contributors: FeatureContribution[];
+}
+
 export type Tier = "pre_weekend" | "post_practice" | "post_qualifying";
 export type PredictionSource = "live" | "tracked" | "backtest";
 
@@ -62,6 +77,25 @@ export interface TrackRecordEntry {
 export interface TrackRecordResponse {
   n_resolved: number;
   by_market: TrackRecordEntry[];
+}
+
+export interface RaceAccuracyEntry {
+  season: number;
+  round: number;
+  race_name: string;
+  tier: string;
+  win_predicted: string[];
+  win_actual: string[];
+  win_hits: number;
+  win_of: number;
+  podium_predicted: string[];
+  podium_actual: string[];
+  podium_hits: number;
+  podium_of: number;
+  points_finish_predicted: string[];
+  points_finish_actual: string[];
+  points_finish_hits: number;
+  points_finish_of: number;
 }
 
 export interface LiveCurrentResponse {

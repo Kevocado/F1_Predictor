@@ -64,3 +64,37 @@ class TrackRecordEntry(BaseModel):
 class TrackRecordResponse(BaseModel):
     n_resolved: int
     by_market: list[TrackRecordEntry]
+
+
+class FeatureContribution(BaseModel):
+    feature: str
+    value: float | None
+    contribution: float
+
+
+class ExplainResponse(BaseModel):
+    season: int
+    round: int
+    driver_id: str
+    candidate: str  # "elo" or "xgb_ranker"
+    strength_contributors: list[FeatureContribution]  # drives win/podium/points together
+    dnf_contributors: list[FeatureContribution]
+
+
+class RaceAccuracyEntry(BaseModel):
+    season: int
+    round: int
+    race_name: str
+    tier: str
+    win_predicted: list[str] = []
+    win_actual: list[str] = []
+    win_hits: int = 0
+    win_of: int = 1
+    podium_predicted: list[str] = []
+    podium_actual: list[str] = []
+    podium_hits: int = 0
+    podium_of: int = 3
+    points_finish_predicted: list[str] = []
+    points_finish_actual: list[str] = []
+    points_finish_hits: int = 0
+    points_finish_of: int = 10

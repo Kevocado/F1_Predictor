@@ -16,6 +16,8 @@ from . import weather as weather_features
 FEATURE_COLUMNS = [
     "elo_pre_race",
     "team_strength_pre_race",
+    "team_form_avg_position_3",
+    "team_form_points_3",
     "form_avg_position_3",
     "form_avg_points_3",
     "form_dnf_rate_3",
@@ -81,6 +83,7 @@ def build_training_frame(
 
     elo_hist = elo.compute_elo_history(results_df)
     team_hist = team_strength.compute_team_strength_history(results_df)
+    team_form_hist = team_strength.compute_team_rolling_form(results_df)
     form_hist = rolling_form.compute_rolling_form(results_df)
     circuit_hist = circuit.compute_circuit_history(results_df, schedule_df)
     dnf_rate_hist = safety_car.compute_circuit_dnf_rate(results_df, schedule_df)
@@ -89,6 +92,7 @@ def build_training_frame(
 
     df = results_df.merge(elo_hist, on=["season", "round", "driver_id"], how="left")
     df = df.merge(team_hist, on=["season", "round", "constructor_id"], how="left")
+    df = df.merge(team_form_hist, on=["season", "round", "constructor_id"], how="left")
     df = df.merge(form_hist, on=["season", "round", "driver_id"], how="left")
     df = df.merge(circuit_hist.drop(columns=["constructor_id"]), on=["season", "round", "driver_id"], how="left")
     df = df.merge(dnf_rate_hist.drop(columns=["circuit_id"]), on=["season", "round"], how="left")

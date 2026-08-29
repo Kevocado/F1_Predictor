@@ -24,6 +24,7 @@ from sklearn.metrics import brier_score_loss, log_loss
 from ..data import jolpica
 from ..features import session_state
 from ..features.build import build_training_frame
+from ..models import dnf as dnf_model
 from ..models import race_outcome
 
 
@@ -51,16 +52,32 @@ def _race_groups(df: pd.DataFrame):
         yield season, round_, race
 
 
-def evaluate_candidate(folds: list[dict], candidate: str, n_trials: int = 3000) -> pd.DataFrame:
+def evaluate_candidate(
+    folds: list[dict],
+    candidate: str,
+    n_trials: int = 3000,
+    feature_cols_override: list[str] | None = None,
+    hyperparams: dict | None = None,
+) -> pd.DataFrame:
     """`candidate`: "elo" or "xgb_ranker". One row per fold: val_season,
     n_races, log_loss/brier on the win market (P(win) vs. who actually
     won), the metric models/manifest.py::train_all races the two
-    candidates on."""
+    candidates on. `feature_cols_override` trains/predicts on a SUBSET of
+    the fold's normal feature columns (evaluate/feature_ablation.py's "is
+    this feature actually pulling weight" check); `hyperparams` overrides
+    the ranker's defaults (evaluate/tune_hyperparams.py's Optuna search).
+    Both no-ops when omitted."""
     rows = []
     for fold in folds:
         train_df, val_df, feature_cols = fold["train_df"], fold["val_df"], fold["feature_cols"]
+        if feature_cols_override is not None:
+            feature_cols = feature_cols_override
 
-        ranker = race_outcome.train_ranker(train_df, feature_cols) if candidate == "xgb_ranker" else None
+        ranker = (
+            race_outcome.train_ranker(train_df, feature_cols, hyperparams=hyperparams)
+            if candidate == "xgb_ranker"
+            else None
+        )
 
         y_true: list[int] = []
         y_pred: list[float] = []
@@ -98,3 +115,26 @@ def walk_forward_validate(seasons: list[int] | None = None, min_train_seasons: i
         "elo": evaluate_candidate(folds, "elo"),
         "xgb_ranker": evaluate_candidate(folds, "xgb_ranker"),
     }
+
+
+def evaluate_dnf_model(folds: list[dict], hyperparams: dict | None = None) -> pd.DataFrame:
+    """Held-out log-loss/brier for the DNF reliability model across the
+    same walk-forward folds prepare_folds() builds — evaluated
+    independently of the race-outcome candidates (a driver's DNF is a
+    separate model, not part of the strength-score race-off above). This
+    is what evaluate/tune_hyperparams.py tunes the DNF model against."""
+    rows = []
+    for fold in folds:
+        train_df, val_df, feature_cols = fold["train_df"], fold["val_df"], fold["feature_cols"]
+        clf = dnf_model.train_dnf_model(train_df, feature_cols, hyperparams=hyperparams)
+        y_true = val_df["dnf"].astype(int)
+        y_pred = clf.predict_proba(val_df[feature_cols])[:, 1]
+        rows.append(
+            {
+                "val_season": fold["val_season"],
+                "n": len(val_df),
+                "log_loss": log_loss(y_true, y_pred, labels=[0, 1]),
+                "brier": brier_score_loss(y_true, y_pred),
+            }
+        )
+    return pd.DataFrame(rows)

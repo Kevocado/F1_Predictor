@@ -69,18 +69,22 @@ def theta_from_elo_strength(strengths: dict[str, float]) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def train_ranker(train_df: pd.DataFrame, feature_cols: list[str]) -> xgb.XGBRanker:
+def train_ranker(train_df: pd.DataFrame, feature_cols: list[str], hyperparams: dict | None = None) -> xgb.XGBRanker:
     """`rank:pairwise` on the tier-augmented frame, grouped per (season,
     round, tier) so the model learns within-race relative order — the same
     race replayed at a different tier is treated as its own group, since
-    the point of tiering is that fewer columns are known there."""
+    the point of tiering is that fewer columns are known there.
+    `hyperparams` overrides RANKER_PARAMS (e.g. from
+    evaluate/tune_hyperparams.py's Optuna search) — omit for production
+    defaults."""
     df = train_df.sort_values(["season", "round", "tier"]).reset_index(drop=True)
     group_keys = ["season", "round", "tier"]
     field_size = df.groupby(group_keys)["driver_id"].transform("count")
     label = (field_size - df["position"].fillna(field_size)).clip(lower=0)
     group_sizes = df.groupby(group_keys, sort=False).size().values
 
-    model = xgb.XGBRanker(**RANKER_PARAMS)
+    params = {**RANKER_PARAMS, **(hyperparams or {})}
+    model = xgb.XGBRanker(**params)
     model.fit(df[feature_cols], label, group=group_sizes)
     return model
 

@@ -51,7 +51,7 @@ export function RacePredictionPanel({ season, round }: { season: number; round: 
           </span>
         </div>
       </div>
-      <DriverPredictionTable predictions={data.predictions} />
+      <DriverPredictionTable predictions={data.predictions} season={data.season} round={data.round} />
     </div>
   );
 }

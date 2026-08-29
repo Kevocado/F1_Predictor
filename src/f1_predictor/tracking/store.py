@@ -258,6 +258,46 @@ def get_track_record(tier: str | None = None) -> dict:
     return {"n_resolved": int(len(df)), "by_market": rows}
 
 
+def get_race_accuracy(tier: str | None = None) -> list[dict]:
+    """Per-race accuracy: did the model's own top pick actually win, and
+    how many of its predicted top-3/top-10 actually landed there — the
+    "did it call the right positions" question the aggregate Brier/hit-
+    rate numbers in get_track_record() don't directly answer (a
+    well-calibrated 9% win probability is "correct" even when that driver
+    doesn't win most of the time; this asks the more literal question)."""
+    with _connect() as conn:
+        query = (
+            "SELECT season, round, race_name, tier, driver_id, market, predicted_prob, actual_outcome "
+            "FROM race_predictions WHERE resolved = 1 AND market IN ('win', 'podium', 'points_finish')"
+        )
+        params: tuple = ()
+        if tier:
+            query += " AND tier = ?"
+            params = (tier,)
+        df = pd.read_sql(query, conn, params=params)
+
+    if df.empty:
+        return []
+
+    top_n = {"win": 1, "podium": 3, "points_finish": 10}
+    rows = []
+    for (season, round_, race_name, t), race_df in df.groupby(["season", "round", "race_name", "tier"]):
+        row = {"season": int(season), "round": int(round_), "race_name": race_name, "tier": t}
+        for market, n in top_n.items():
+            market_df = race_df[race_df["market"] == market]
+            if market_df.empty:
+                continue
+            predicted = set(market_df.nlargest(n, "predicted_prob")["driver_id"])
+            actual = set(market_df.loc[market_df["actual_outcome"] == 1, "driver_id"])
+            row[f"{market}_predicted"] = sorted(predicted)
+            row[f"{market}_actual"] = sorted(actual)
+            row[f"{market}_hits"] = len(predicted & actual)
+            row[f"{market}_of"] = n
+        rows.append(row)
+
+    return sorted(rows, key=lambda r: (r["season"], r["round"]), reverse=True)
+
+
 def get_race_prediction(season: int, round_: int, tier: str | None = None) -> list[dict]:
     with _connect() as conn:
         query = "SELECT * FROM race_predictions WHERE season = ? AND round = ?"

@@ -78,6 +78,7 @@ def build_future_feature_rows(
     elo_ratings = elo.latest_ratings(results_df)
     team_ratings = team_strength.latest_ratings(results_df)
     form_snap = _current_form_snapshot(results_df)
+    team_form_snap = team_strength.current_team_form_snapshot(results_df)
 
     hist = with_circuit(results_df, schedule_df).copy()
     hist["finish_position"] = hist["position"].fillna(20)
@@ -116,6 +117,7 @@ def build_future_feature_rows(
                 "wind_max_kph": float("nan"),
             }
             row.update(form_snap.get(d, {}))
+            row.update(team_form_snap.get(constructor_id, {}))
             rows.append(row)
 
     df = pd.DataFrame(rows)

@@ -80,3 +80,63 @@ def latest_ratings(results_df: pd.DataFrame) -> dict[str, float]:
     for _, _, race in _iter_races(results_df):
         _update_race(ratings, race)
     return ratings
+
+
+TEAM_FORM_WINDOW = 3
+
+# A constructor's own Elo-style rating above moves slowly by design (K=16,
+# spread across ~10 pairwise comparisons per race) — appropriate for a
+# season-long "how good is this car overall" estimate, but it dilutes a
+# sudden step-change (a major upgrade, a post-summer-break development
+# push) across many races instead of surfacing it quickly. This is a
+# separate, fast-reacting signal for exactly that case: the team's own
+# average finishing position/points over just its last 3 races, so the
+# model can learn to weight recent form over the slower Elo rating when
+# the two diverge.
+def compute_team_rolling_form(results_df: pd.DataFrame, window: int = TEAM_FORM_WINDOW) -> pd.DataFrame:
+    """No-lookahead: shift(1) before rolling, same discipline as
+    features/rolling_form.py's per-driver windows. Both cars are averaged
+    into one per-race number first (a team fields two cars, not one),
+    THEN rolled across races."""
+    df = results_df.copy()
+    df["finish_position"] = df["position"].fillna(20)
+    per_race = (
+        df.groupby(["season", "round", "constructor_id"])
+        .agg(team_race_avg_position=("finish_position", "mean"), team_race_points=("points", "sum"))
+        .reset_index()
+        .sort_values(["constructor_id", "season", "round"])
+    )
+
+    grouped = per_race.groupby("constructor_id")
+    per_race[f"team_form_avg_position_{window}"] = grouped["team_race_avg_position"].transform(
+        lambda s: s.shift(1).rolling(window, min_periods=1).mean()
+    )
+    per_race[f"team_form_points_{window}"] = grouped["team_race_points"].transform(
+        lambda s: s.shift(1).rolling(window, min_periods=1).mean()
+    )
+    return per_race[["season", "round", "constructor_id", f"team_form_avg_position_{window}", f"team_form_points_{window}"]]
+
+
+def current_team_form_snapshot(results_df: pd.DataFrame, window: int = TEAM_FORM_WINDOW) -> dict[str, dict]:
+    """A constructor's form entering its NEXT (not-yet-happened) race —
+    the last `window` races it's actually run, unshifted, since this is a
+    genuinely future row rather than a historical training row. Mirrors
+    models/championship_projection.py::_current_form_snapshot's per-driver
+    counterpart."""
+    df = results_df.copy()
+    df["finish_position"] = df["position"].fillna(20)
+    per_race = (
+        df.groupby(["season", "round", "constructor_id"])
+        .agg(team_race_avg_position=("finish_position", "mean"), team_race_points=("points", "sum"))
+        .reset_index()
+        .sort_values(["constructor_id", "season", "round"])
+    )
+
+    out: dict[str, dict] = {}
+    for constructor_id, g in per_race.groupby("constructor_id"):
+        tail = g.tail(window)
+        out[constructor_id] = {
+            f"team_form_avg_position_{window}": tail["team_race_avg_position"].mean(),
+            f"team_form_points_{window}": tail["team_race_points"].mean(),
+        }
+    return out

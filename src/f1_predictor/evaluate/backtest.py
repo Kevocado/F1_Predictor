@@ -41,14 +41,20 @@ def backtest_race(season: int, round_: int, seasons: list[int] | None = None) ->
 
     manifest = manifest_module.load_manifest()
     candidate = manifest["race_outcome_candidate"]
+    # Same hyperparameters the currently-deployed model was actually
+    # trained with (models/manifest.py::train_all persists whichever it
+    # used, tuned or default) — an honest replay should match production,
+    # not silently fall back to defaults if the deployed model is tuned.
+    ranker_params = manifest.get("tuned_ranker_params")
+    dnf_params = manifest.get("tuned_dnf_params")
 
     if candidate == "elo":
         theta = race_outcome.theta_from_elo_strength(race_outcome.elo_strengths(race_df))
     else:
-        ranker = race_outcome.train_ranker(train_df, feature_cols)
+        ranker = race_outcome.train_ranker(train_df, feature_cols, hyperparams=ranker_params)
         theta = race_outcome.theta_from_xgb_scores(race_outcome.xgb_scores_for_race(ranker, race_df, feature_cols))
 
-    dnf_clf = dnf_model.train_dnf_model(train_df, feature_cols)
+    dnf_clf = dnf_model.train_dnf_model(train_df, feature_cols, hyperparams=dnf_params)
     dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, race_df, feature_cols)
 
     sim = race_outcome.simulate_race(theta, dnf_prob=dnf_prob, n_trials=10000, seed=0)

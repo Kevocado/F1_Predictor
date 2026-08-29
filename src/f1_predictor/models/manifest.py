@@ -23,6 +23,24 @@ from . import race_outcome
 RACE_OUTCOME_MODEL_PATH = MODELS_DIR / "race_outcome_ranker.json"
 DNF_MODEL_PATH = MODELS_DIR / "dnf_model.json"
 MANIFEST_PATH = MODELS_DIR / "manifest.json"
+OPTUNA_DB_PATH = MODELS_DIR / "optuna_studies.db"
+
+
+def _load_tuned_params(study_name: str) -> dict | None:
+    """Best hyperparameters from an evaluate/tune_hyperparams.py Optuna
+    study, if one has been run — None (production defaults) if no study
+    or no completed trials exist yet. A missing/corrupt study file is
+    treated the same as "not tuned yet," never a hard failure — training
+    should still work with zero tuning history."""
+    if not OPTUNA_DB_PATH.exists():
+        return None
+    try:
+        import optuna
+
+        study = optuna.load_study(study_name=study_name, storage=f"sqlite:///{OPTUNA_DB_PATH}")
+        return study.best_params if study.trials else None
+    except Exception:  # noqa: BLE001 - tuning is an optional enhancement, never blocks training
+        return None
 
 
 def train_all(seasons: list[int] | None = None) -> dict:
@@ -30,11 +48,18 @@ def train_all(seasons: list[int] | None = None) -> dict:
     df, feature_cols = build_training_frame(seasons=seasons)
     post_quali = df[df["tier"] == session_state.TIER_POST_QUALIFYING]
 
+    ranker_params = _load_tuned_params("race_outcome_ranker")
+    dnf_params = _load_tuned_params("dnf_model")
+
     print(f"Training frame: {len(df)} rows ({len(post_quali)} post-qualifying) across seasons {seasons}")
+    if ranker_params:
+        print(f"Using Optuna-tuned race_outcome_ranker hyperparameters: {ranker_params}")
+    if dnf_params:
+        print(f"Using Optuna-tuned dnf_model hyperparameters: {dnf_params}")
     print("Running walk-forward validation (elo vs. xgb_ranker candidates)...")
     folds = walk_forward.prepare_folds(seasons)
     elo_metrics = walk_forward.evaluate_candidate(folds, "elo")
-    xgb_metrics = walk_forward.evaluate_candidate(folds, "xgb_ranker")
+    xgb_metrics = walk_forward.evaluate_candidate(folds, "xgb_ranker", hyperparams=ranker_params)
 
     # Selection uses only the LAST fold (trained on every season but the
     # most recent — the most historical data of any fold, closest to what
@@ -55,11 +80,11 @@ def train_all(seasons: list[int] | None = None) -> dict:
     print(f"Last-fold (selection) log-loss — elo: {elo_last:.4f}, xgb_ranker: {xgb_last:.4f} -> chosen: {chosen}")
 
     print("Training final race_outcome ranker on full history...")
-    ranker = race_outcome.train_ranker(post_quali, feature_cols)
+    ranker = race_outcome.train_ranker(post_quali, feature_cols, hyperparams=ranker_params)
     ranker.save_model(str(RACE_OUTCOME_MODEL_PATH))
 
     print("Training DNF reliability model on full history...")
-    dnf_clf = dnf_model.train_dnf_model(post_quali, feature_cols)
+    dnf_clf = dnf_model.train_dnf_model(post_quali, feature_cols, hyperparams=dnf_params)
     dnf_clf.save_model(str(DNF_MODEL_PATH))
 
     manifest = {
@@ -67,6 +92,8 @@ def train_all(seasons: list[int] | None = None) -> dict:
         "seasons": seasons,
         "feature_cols": feature_cols,
         "race_outcome_candidate": chosen,
+        "tuned_ranker_params": ranker_params,
+        "tuned_dnf_params": dnf_params,
         "race_outcome_candidate_metrics": {
             "elo_last_fold_log_loss": elo_last,
             "xgb_ranker_last_fold_log_loss": xgb_last,

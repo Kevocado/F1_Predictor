@@ -1,17 +1,27 @@
 import type { ChampionshipEntry } from "../types";
 import { num, pct } from "../lib/format";
-import { ProbabilityBar } from "./ProbabilityBar";
+import { ProbabilityHeatCell } from "./ProbabilityHeatCell";
 
 interface Props {
   entries: ChampionshipEntry[];
   renderEntity: (entityId: string) => React.ReactNode;
 }
 
+function columnMax(entries: ChampionshipEntry[], key: keyof ChampionshipEntry): number {
+  const max = Math.max(...entries.map((e) => e[key] as number));
+  return max > 0 ? max : 1;
+}
+
 export function ChampionshipTable({ entries, renderEntity }: Props) {
   const sorted = [...entries].sort((a, b) => a.expected_final_rank - b.expected_final_rank);
+  const maxWin = columnMax(sorted, "win_prob");
+  const maxTop3 = columnMax(sorted, "top3_prob");
 
   return (
     <div className="overflow-x-auto">
+      <p className="mb-2.5 text-[11px] text-f1-text-faint">
+        Shading shows each entrant's title/top-3 chance relative to the field, not an absolute scale.
+      </p>
       <table className="w-full min-w-[560px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-f1-border text-left text-[11px] uppercase tracking-wide text-f1-text-faint">
@@ -27,11 +37,11 @@ export function ChampionshipTable({ entries, renderEntity }: Props) {
             <tr key={e.entity_id} className="border-b border-f1-border/60 last:border-0 hover:bg-f1-800/40">
               <td className="py-2.5 pr-3 tabular-nums text-f1-text-faint">{i + 1}</td>
               <td className="py-2.5 pr-3 font-medium text-f1-text">{renderEntity(e.entity_id)}</td>
-              <td className="py-2.5 pr-3">
-                <ProbabilityBar value={e.win_prob} color="var(--color-f1-red)" digits={1} />
+              <td className="py-1.5 pr-2">
+                <ProbabilityHeatCell value={e.win_prob} intensity={e.win_prob / maxWin} color="var(--color-f1-red)" digits={1} />
               </td>
-              <td className="py-2.5 pr-3">
-                <ProbabilityBar value={e.top3_prob} color="var(--color-podium)" />
+              <td className="py-1.5 pr-2">
+                <ProbabilityHeatCell value={e.top3_prob} intensity={e.top3_prob / maxTop3} color="var(--color-podium)" />
               </td>
               <td className="py-2.5 pr-3 text-right tabular-nums text-f1-text-dim">
                 {num(e.expected_final_points, 0)}

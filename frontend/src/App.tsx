@@ -2,8 +2,9 @@ import { useState } from "react";
 import { RacesPage } from "./pages/RacesPage";
 import { ChampionshipPage } from "./pages/ChampionshipPage";
 import { TrackRecordPage } from "./pages/TrackRecordPage";
+import { LivePage } from "./pages/LivePage";
 
-type Tab = "races" | "championship" | "track-record";
+type Tab = "races" | "championship" | "track-record" | "live";
 
 function App() {
   const [tab, setTab] = useState<Tab>("races");
@@ -24,6 +25,7 @@ function App() {
           {(
             [
               ["races", "Races"],
+              ["live", "Live"],
               ["championship", "Championship"],
               ["track-record", "Track Record"],
             ] as const
@@ -41,12 +43,15 @@ function App() {
         </nav>
       </header>
 
-      {/* All three pages mount immediately and stay mounted, hidden with
-          CSS rather than unmounted, so switching tabs never re-fetches
-          data that's already loaded. */}
+      {/* All pages mount immediately and stay mounted, hidden with CSS
+          rather than unmounted, so switching tabs never re-fetches data
+          that's already loaded. */}
       <main>
         <div style={{ display: tab === "races" ? "block" : "none" }}>
           <RacesPage />
+        </div>
+        <div style={{ display: tab === "live" ? "block" : "none" }}>
+          <LivePage />
         </div>
         <div style={{ display: tab === "championship" ? "block" : "none" }}>
           <ChampionshipPage />

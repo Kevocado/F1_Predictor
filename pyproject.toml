@@ -18,6 +18,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "fastf1",
+    "optuna",
 ]
 
 [project.optional-dependencies]

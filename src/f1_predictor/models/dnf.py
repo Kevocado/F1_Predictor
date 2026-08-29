@@ -20,8 +20,9 @@ DNF_PARAMS = dict(
 )
 
 
-def train_dnf_model(train_df: pd.DataFrame, feature_cols: list[str]) -> xgb.XGBClassifier:
-    model = xgb.XGBClassifier(**DNF_PARAMS)
+def train_dnf_model(train_df: pd.DataFrame, feature_cols: list[str], hyperparams: dict | None = None) -> xgb.XGBClassifier:
+    params = {**DNF_PARAMS, **(hyperparams or {})}
+    model = xgb.XGBClassifier(**params)
     model.fit(train_df[feature_cols], train_df["dnf"].astype(int))
     return model
 

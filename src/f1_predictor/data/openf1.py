@@ -196,6 +196,19 @@ def build_live_state_frame(
     sc_active = safety_car_active_from_messages(fetch_race_control_flags(session_key))
     total_laps = CIRCUIT_LAP_COUNTS.get(circuit_id)
 
+    # KNOWN LIMITATION, not fixed here (see docs/live_engine_design.md):
+    # `/position` is a sparse event log that only emits a row when a
+    # driver's position CHANGES, not a periodic snapshot — confirmed
+    # directly. That makes "this driver's last update is old" ambiguous
+    # between two very different situations (stably holding position for
+    # a long stretch — genuinely current — vs. having retired and simply
+    # stopped being tracked — stale) with no way to tell them apart from
+    # this endpoint alone. An earlier attempt to filter "stale" rows by
+    # update age excluded the actual race leader, who simply hadn't
+    # changed position in a while, so it was removed rather than shipped
+    # broken. A retired driver may therefore show a misleadingly
+    # competitive P(win) until a cleaner signal (e.g. cross-referencing
+    # race-control retirement messages) is built.
     rows = []
     for driver_number, code in drivers.items():
         driver_id = driver_code_to_id.get(code)
@@ -203,7 +216,9 @@ def build_live_state_frame(
             continue
 
         pos_row = positions[positions["driver_number"] == driver_number]
-        current_position = float(pos_row["position"].iloc[0]) if not pos_row.empty else np.nan
+        if pos_row.empty:
+            continue
+        current_position = float(pos_row["position"].iloc[0])
 
         int_row = intervals[intervals["driver_number"] == driver_number]
         gap_to_leader = _safe_float(int_row["gap_to_leader"].iloc[0]) if not int_row.empty else np.nan
@@ -247,6 +262,10 @@ def build_live_state_frame(
                 "grid_position": grid_positions.get(driver_id, np.nan),
                 "driver_pre_race_strength": elo_ratings.get(driver_id, np.nan),
                 "constructor_strength": team_ratings.get(constructor_id, np.nan),
+                "inferred_soc": np.nan,
+                "deploy_time_s": np.nan,
+                "harvest_time_s": np.nan,
+                "clipping_time_s": np.nan,
             }
         )
 
