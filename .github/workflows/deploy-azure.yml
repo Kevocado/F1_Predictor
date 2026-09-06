@@ -16,7 +16,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }}
       - name: Build and push image
         run: |
           docker build -t ghcr.io/kevocado/f1-predictor:${{ github.sha }} -t ghcr.io/kevocado/f1-predictor:latest .
