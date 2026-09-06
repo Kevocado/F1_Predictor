@@ -83,11 +83,25 @@ def _get(path: str, params: dict | None = None, attempts: int = 3, backoff: floa
     raise RuntimeError(f"Failed to fetch {url} after {attempts} attempts") from last_err
 
 
+def _is_not_yet_available(data: dict) -> bool:
+    """True for a RaceTable-shaped response with no Races yet — e.g.
+    results.json fetched while that round's race is still in progress.
+    Confirmed directly: this is NOT immutable the way a finished round's
+    data is (jolpica publishes it later, once the race ends), so it must
+    never be written to the on-disk cache below — with no TTL/staleness
+    check, a round cached empty mid-race would stay "empty" forever, even
+    long after jolpica actually has the real results."""
+    race_table = data.get("MRData", {}).get("RaceTable")
+    return race_table is not None and not race_table.get("Races")
+
+
 def _cache_or_fetch(cache_name: str, path: str, params: dict | None = None, force_refresh: bool = False) -> dict:
     cache_path = JOLPICA_CACHE_DIR / f"{cache_name}.json"
     if cache_path.exists() and not force_refresh:
         return json.loads(cache_path.read_text())
     data = _get(path, params=params)
+    if _is_not_yet_available(data):
+        return data
     cache_path.write_text(json.dumps(data))
     return data
 

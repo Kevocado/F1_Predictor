@@ -8,6 +8,7 @@ python-dotenv
 fastapi
 uvicorn[standard]
 fastf1
+optuna
 
 [dev]
 jupyter

@@ -102,7 +102,16 @@ def poll_once() -> dict:
     script) — run_poller wraps it for the async background loop."""
     global _cache
 
-    session = openf1.fetch_latest_session()
+    try:
+        session = openf1.fetch_latest_session()
+    except RuntimeError as exc:
+        # Distinguish "OpenF1 blocked us" from "genuinely no live session"
+        # (see openf1.fetch_latest_session's docstring) — collapsing both
+        # to {"live": False} would tell the frontend a race isn't live
+        # when the real problem is the request being rejected.
+        _cache = {"live": False, "blocked": True, "reason": str(exc)}
+        return _cache
+
     if session is None or session.get("session_type") != "Race" or not openf1.is_session_live(session):
         _cache = {"live": False}
         return _cache

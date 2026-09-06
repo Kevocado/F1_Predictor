@@ -70,13 +70,17 @@ def _get(path: str, params: dict | None = None, attempts: int = 2, timeout: floa
 
 
 def fetch_latest_session() -> dict | None:
-    """The currently-live (or most recently completed) session, or None on
-    any failure. `GET /v1/sessions?session_key=latest` — confirmed live
-    against the real API."""
-    try:
-        sessions = _get("sessions", {"session_key": "latest"})
-    except RuntimeError:
-        return None
+    """The currently-live (or most recently completed) session, or None if
+    OpenF1 genuinely has none to report. `GET /v1/sessions?session_key=latest`
+    — confirmed live against the real API. Deliberately does NOT swallow a
+    RuntimeError into None here: OpenF1 has since added a paywall that
+    blocks ALL unauthenticated access (not just live-session endpoints,
+    confirmed directly — even historical queries 401 the same way) for the
+    entire duration of a live session, with a 401 pointing at a paid-key
+    signup page. That failure means "we got blocked," not "no race is
+    live" — collapsing the two would tell the user the opposite of what's
+    actually happening. Let it propagate; the caller decides what to do."""
+    sessions = _get("sessions", {"session_key": "latest"})
     return sessions[0] if sessions else None
 
 

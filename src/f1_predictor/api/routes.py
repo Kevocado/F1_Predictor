@@ -64,6 +64,22 @@ def _cached(key: str, build_fn, ttl: float = _CACHE_TTL_SECONDS):
     return value
 
 
+def _race_is_completed(season: int, round_: int, race_datetime: pd.Timestamp | None, now: pd.Timestamp) -> bool:
+    """A race is only "completed" once jolpica has an actual classification
+    for it — NOT merely once its scheduled start time has passed. A race
+    in progress right now (post-qualifying, past its start time, no
+    official result yet) previously fell through this date-only check into
+    _completed_race_prediction, which has nothing to serve for it (no
+    tracked pre-race snapshot, and backtest_race needs a real finishing
+    result that doesn't exist yet) — a 500 the frontend surfaced as
+    "failed to fetch." Cheap in practice: fetch_race_results is cached
+    per-round once real results exist (see data/jolpica.py), so this only
+    ever does a real network check while a race is still genuinely live."""
+    if race_datetime is None or pd.isna(race_datetime) or race_datetime > now:
+        return False
+    return not jolpica.fetch_race_results(season, round_).empty
+
+
 def _require_manifest() -> dict:
     if not manifest_module.MANIFEST_PATH.exists():
         raise HTTPException(status_code=409, detail="No trained models yet — call POST /api/retrain first.")
@@ -175,7 +191,7 @@ def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFr
         raise HTTPException(status_code=404, detail=f"No such race: {season} round {round_}")
     race_row = race_rows.iloc[0]
     now = pd.Timestamp.now(tz="UTC")
-    completed = pd.notna(race_row["race_datetime"]) and race_row["race_datetime"] <= now
+    completed = _race_is_completed(season, round_, race_row["race_datetime"], now)
 
     if completed:
         df, feature_cols = _cached(
@@ -199,7 +215,7 @@ def list_races(season: int | None = None) -> list[RaceSummary]:
     now = pd.Timestamp.now(tz="UTC")
     out = []
     for _, r in schedule.iterrows():
-        completed = pd.notna(r["race_datetime"]) and r["race_datetime"] <= now
+        completed = _race_is_completed(season, int(r["round"]), r["race_datetime"], now)
         out.append(
             RaceSummary(
                 season=season,
@@ -216,7 +232,15 @@ def list_races(season: int | None = None) -> list[RaceSummary]:
 
 def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, completed: bool) -> tuple[pd.DataFrame, str, str]:
     if completed:
-        return _completed_race_prediction(season, round_)
+        try:
+            return _completed_race_prediction(season, round_)
+        except ValueError:
+            # _race_is_completed already checks for a real classification,
+            # but a race can still finish (checkered flag) before jolpica
+            # actually publishes it — a brief honest window where there's
+            # truly nothing "completed" to serve yet. Degrade to the
+            # latest pre-race/post-qualifying prediction rather than 500ing.
+            pass
     sim, tier = _predict_upcoming_race(season, round_, race_row)
     return sim, tier, "live"
 
@@ -229,7 +253,7 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
         raise HTTPException(status_code=404, detail=f"No such race: {season} round {round_}")
     race_row = race_rows.iloc[0]
     now = pd.Timestamp.now(tz="UTC")
-    completed = pd.notna(race_row["race_datetime"]) and race_row["race_datetime"] <= now
+    completed = _race_is_completed(season, round_, race_row["race_datetime"], now)
 
     # Uncached, this rebuilt the whole future-feature frame (elo/team-
     # strength replay across the season) on every request for an upcoming

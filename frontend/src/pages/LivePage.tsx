@@ -57,7 +57,18 @@ export function LivePage() {
 
       {!error && !live && <div className="animate-pulse text-sm text-f1-text-faint">Checking for a live session…</div>}
 
-      {live && !live.live && (
+      {live && !live.live && live.blocked && (
+        <div className="rounded-lg border border-dnf/30 bg-dnf/10 p-4 text-sm text-dnf">
+          <p className="font-medium">Live predictions unavailable — OpenF1 is blocking free access right now.</p>
+          <p className="mt-1 text-xs text-f1-text-faint">
+            OpenF1 now requires a paid API key for any access (including historical queries) for the entire
+            duration of a live session. A race may genuinely be live — we just can't reach the feed for it
+            without a key.
+          </p>
+        </div>
+      )}
+
+      {live && !live.live && !live.blocked && (
         <p className="py-10 text-center text-sm text-f1-text-faint">
           No race is live right now. Check back during a Grand Prix — this updates automatically once one starts.
         </p>

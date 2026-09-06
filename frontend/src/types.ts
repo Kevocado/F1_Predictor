@@ -100,6 +100,8 @@ export interface RaceAccuracyEntry {
 
 export interface LiveCurrentResponse {
   live: boolean;
+  blocked?: boolean;
+  reason?: string;
 }
 
 export interface RetrainResponse {

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/sigey/Documents/Projects/F1_Predictor && export PYTHONPATH=/Users/sigey/Documents/Projects/F1_Predictor/src && /Users/sigey/Documents/Projects/F1_Predictor/.venv/bin/python -m uvicorn f1_predictor.api.main:app --reload --host 0.0.0.0 --port 8010"],
+      "port": 8010
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/sigey/Documents/Projects/F1_Predictor/frontend && npm run dev -- --port 5180"],
+      "port": 5180
+    }
+  ]
+}
