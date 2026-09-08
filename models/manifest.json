@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-08-23T23:39:36.871297+00:00",
+  "trained_at": "2026-09-08T18:41:24.615666+00:00",
   "seasons": [
     2019,
     2020,
@@ -56,10 +56,10 @@
     "reg_lambda": 0.015013182315032979
   },
   "race_outcome_candidate_metrics": {
-    "elo_last_fold_log_loss": 0.16391805162331802,
-    "xgb_ranker_last_fold_log_loss": 0.11378643439082152,
-    "elo_mean_log_loss": 0.13849488565886423,
-    "xgb_ranker_mean_log_loss": 0.1302799075943298
+    "elo_last_fold_log_loss": 0.16400960119405975,
+    "xgb_ranker_last_fold_log_loss": 0.11570384920891766,
+    "elo_mean_log_loss": 0.13851319557301256,
+    "xgb_ranker_mean_log_loss": 0.13066339055794904
   },
   "walk_forward_folds": {
     "elo": [
@@ -89,9 +89,9 @@
       },
       {
         "val_season": 2026,
-        "n_races": 12,
-        "log_loss": 0.16391805162331802,
-        "brier": 0.044653624579124584
+        "n_races": 13,
+        "log_loss": 0.16400960119405975,
+        "brier": 0.04465892307692308
       }
     ],
     "xgb_ranker": [
@@ -121,9 +121,9 @@
       },
       {
         "val_season": 2026,
-        "n_races": 12,
-        "log_loss": 0.11378643439082152,
-        "brier": 0.03295354882154882
+        "n_races": 13,
+        "log_loss": 0.11570384920891766,
+        "brier": 0.03340310878010878
       }
     ]
   }
