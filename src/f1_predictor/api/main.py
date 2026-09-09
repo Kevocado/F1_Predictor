@@ -15,8 +15,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from ..config import FRONTEND_DIST_DIR
-from .routes import router
+from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECONDS
+from .routes import refresh_public_snapshot_from_remote, router
+
+
+async def _public_snapshot_poll_loop():
+    while True:
+        await asyncio.to_thread(refresh_public_snapshot_from_remote)
+        await asyncio.sleep(PUBLIC_SNAPSHOT_POLL_SECONDS)
 
 
 @asynccontextmanager
@@ -30,9 +36,17 @@ async def lifespan(_app: FastAPI):
     # whole point of the public deployment.
     from ..models import live_poller
 
-    poller_task = asyncio.create_task(live_poller.run_poller())
+    tasks = [asyncio.create_task(live_poller.run_poller())]
+    if PUBLIC_MODE:
+        # Races/predictions/championship are served from
+        # public_snapshot.py's precomputed file in PUBLIC_MODE (see
+        # routes.py) instead of this project's live feature-building
+        # pipeline -- this is how a running process picks up each
+        # scheduled snapshot refresh without a redeploy.
+        tasks.append(asyncio.create_task(_public_snapshot_poll_loop()))
     yield
-    poller_task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title="F1 Predictor API", lifespan=lifespan)

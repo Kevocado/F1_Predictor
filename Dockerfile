@@ -48,6 +48,12 @@ COPY models/manifest.json models/dnf_model.json models/live_win_model.json model
 # so this is safe to ship once. See .dockerignore for what's excluded from
 # this (the current, still-growing season is fetched live, same as today).
 COPY data/cache/jolpica/ ./data/cache/jolpica/
+# The precomputed races/predictions/championship this deployment actually
+# serves (see public_snapshot.py's module docstring) -- generated locally
+# or by .github/workflows/refresh-public-snapshot.yml
+# (`python -m f1_predictor.public_snapshot`) and committed, not built in
+# this image. Must exist before building.
+COPY data/public_snapshot.json ./data/public_snapshot.json
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000

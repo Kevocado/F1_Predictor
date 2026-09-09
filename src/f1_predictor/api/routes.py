@@ -7,13 +7,21 @@ frontend.
 
 from __future__ import annotations
 
+import json
+import logging
 import time
 
 import pandas as pd
+import requests
 import xgboost as xgb
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..config import CURRENT_SEASON, PUBLIC_MODE
+from ..config import (
+    CURRENT_SEASON,
+    PUBLIC_MODE,
+    PUBLIC_SNAPSHOT_PATH,
+    PUBLIC_SNAPSHOT_REFRESH_URL,
+)
 from ..data import jolpica
 from ..evaluate import backtest as backtest_lib
 from ..features import build as build_features
@@ -38,6 +46,55 @@ from .schemas import (
 )
 
 router = APIRouter(prefix="/api")
+
+logger = logging.getLogger(__name__)
+
+_public_snapshot_cache: dict | None = None
+_public_snapshot_etag: str | None = None
+
+
+def _public_snapshot() -> dict:
+    """The precomputed data public_snapshot.py generates. Cold-start value
+    is whatever was baked into this image at build time; a running process
+    then keeps it current via refresh_public_snapshot_from_remote below,
+    polled on a timer (see api/main.py's lifespan). Empty dict if none has
+    been generated yet, so every PUBLIC_MODE branch below just falls
+    through to a live compute instead of a 500."""
+    global _public_snapshot_cache
+    if _public_snapshot_cache is None:
+        _public_snapshot_cache = (
+            json.loads(PUBLIC_SNAPSHOT_PATH.read_text()) if PUBLIC_SNAPSHOT_PATH.exists() else {}
+        )
+    return _public_snapshot_cache
+
+
+def refresh_public_snapshot_from_remote() -> bool:
+    """Re-fetch the precomputed public snapshot from its GitHub raw URL and
+    swap it in -- lets the scheduled snapshot-refresh GitHub Action reach
+    this running process without a Docker rebuild+redeploy. ETag-conditional
+    so an unchanged snapshot costs one small request. Any fetch/parse
+    failure is swallowed and leaves the previous snapshot serving -- a
+    transient network hiccup here must never blank an already-working
+    public site."""
+    global _public_snapshot_cache, _public_snapshot_etag
+    try:
+        headers = {"If-None-Match": _public_snapshot_etag} if _public_snapshot_etag else {}
+        resp = requests.get(PUBLIC_SNAPSHOT_REFRESH_URL, headers=headers, timeout=30)
+        if resp.status_code == 304:
+            return False
+        resp.raise_for_status()
+        snapshot = resp.json()
+    except Exception as exc:
+        logger.info("public snapshot remote refresh skipped: %s", exc)
+        return False
+    _public_snapshot_cache = snapshot
+    _public_snapshot_etag = resp.headers.get("ETag")
+    return True
+
+
+def _snapshot_for_season(season: int) -> dict | None:
+    snap = _public_snapshot()
+    return snap if snap.get("season") == season else None
 
 
 def _admin_only() -> None:
@@ -211,6 +268,14 @@ def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFr
 @router.get("/races", response_model=list[RaceSummary])
 def list_races(season: int | None = None) -> list[RaceSummary]:
     season = season or CURRENT_SEASON
+    if PUBLIC_MODE:
+        snap = _snapshot_for_season(season)
+        if snap is not None:
+            return snap["races"]
+    return _list_races_live(season)
+
+
+def _list_races_live(season: int) -> list[RaceSummary]:
     schedule = _cached(f"schedule_{season}", lambda: jolpica.fetch_season_schedule(season), ttl=_LIVE_CACHE_TTL_SECONDS)
     now = pd.Timestamp.now(tz="UTC")
     out = []
@@ -247,6 +312,16 @@ def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, compl
 
 @router.get("/races/{season}/{round_}/prediction", response_model=RacePredictionResponse)
 def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
+    if PUBLIC_MODE:
+        snap = _snapshot_for_season(season)
+        if snap is not None:
+            pred = snap["predictions"].get(str(round_))
+            if pred is not None:
+                return pred
+    return _get_race_prediction_live(season, round_)
+
+
+def _get_race_prediction_live(season: int, round_: int) -> RacePredictionResponse:
     schedule = jolpica.fetch_season_schedule(season)
     race_rows = schedule[schedule["round"] == round_]
     if race_rows.empty:
@@ -331,6 +406,16 @@ def get_championship(championship: str, season: int | None = None, n_trials: int
     if championship not in ("drivers", "constructors"):
         raise HTTPException(status_code=400, detail="championship must be 'drivers' or 'constructors'")
     season = season or CURRENT_SEASON
+    if PUBLIC_MODE:
+        snap = _snapshot_for_season(season)
+        if snap is not None:
+            champ = snap.get("championship", {}).get(championship)
+            if champ is not None:
+                return champ
+    return _get_championship_live(championship, season, n_trials)
+
+
+def _get_championship_live(championship: str, season: int, n_trials: int) -> ChampionshipResponse:
     _require_manifest()
     result = _cached(
         f"championship_{championship}_{season}_{n_trials}",
