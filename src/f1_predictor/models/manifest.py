@@ -15,15 +15,26 @@ from datetime import datetime, timezone
 from ..config import MODELS_DIR
 from ..data import jolpica
 from ..evaluate import walk_forward
-from ..features import session_state
+from ..features import session_build, session_state
 from ..features.build import build_training_frame
 from . import dnf as dnf_model
-from . import race_outcome
+from . import race_outcome, session_outcome
 
 RACE_OUTCOME_MODEL_PATH = MODELS_DIR / "race_outcome_ranker.json"
 DNF_MODEL_PATH = MODELS_DIR / "dnf_model.json"
 MANIFEST_PATH = MODELS_DIR / "manifest.json"
 OPTUNA_DB_PATH = MODELS_DIR / "optuna_studies.db"
+
+SPRINT_QUALIFYING_MODEL_PATH = MODELS_DIR / "sprint_qualifying_ranker.json"
+QUALIFYING_MODEL_PATH = MODELS_DIR / "qualifying_ranker.json"
+SPRINT_MODEL_PATH = MODELS_DIR / "sprint_ranker.json"
+SPRINT_DNF_MODEL_PATH = MODELS_DIR / "sprint_dnf_model.json"
+
+SESSION_MODEL_PATHS: dict[str, tuple] = {
+    "sprint_qualifying": (SPRINT_QUALIFYING_MODEL_PATH, None),
+    "qualifying": (QUALIFYING_MODEL_PATH, None),
+    "sprint": (SPRINT_MODEL_PATH, SPRINT_DNF_MODEL_PATH),
+}
 
 
 def _load_tuned_params(study_name: str) -> dict | None:
@@ -87,6 +98,22 @@ def train_all(seasons: list[int] | None = None) -> dict:
     dnf_clf = dnf_model.train_dnf_model(post_quali, feature_cols, hyperparams=dnf_params)
     dnf_clf.save_model(str(DNF_MODEL_PATH))
 
+    print("Training the 3 new session predictors (sprint_qualifying, qualifying, sprint)...")
+    session_metrics: dict[str, dict] = {}
+    for session_type, (model_path, dnf_path) in SESSION_MODEL_PATHS.items():
+        spec = session_outcome.SESSION_SPECS[session_type]
+        sdf, sfeature_cols = session_build.build_session_training_frame(session_type, seasons=seasons)
+        if sdf.empty:
+            print(f"  {session_type}: no training data available yet, skipping")
+            continue
+        print(f"  {session_type}: training on {len(sdf)} rows...")
+        sranker = session_outcome.train_session_ranker(sdf, sfeature_cols, spec)
+        sranker.save_model(str(model_path))
+        if spec.has_dnf and dnf_path is not None:
+            sdnf_clf = dnf_model.train_dnf_model(sdf, sfeature_cols)
+            sdnf_clf.save_model(str(dnf_path))
+        session_metrics[session_type] = {"n_training_rows": int(len(sdf))}
+
     manifest = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "seasons": seasons,
@@ -104,6 +131,7 @@ def train_all(seasons: list[int] | None = None) -> dict:
             "elo": elo_metrics.to_dict(orient="records"),
             "xgb_ranker": xgb_metrics.to_dict(orient="records"),
         },
+        "session_models": session_metrics,
     }
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, default=str))
     print(f"Wrote {MANIFEST_PATH}")
