@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 src/f1_predictor/__init__.py
 src/f1_predictor/config.py
+src/f1_predictor/public_snapshot.py
 src/f1_predictor.egg-info/PKG-INFO
 src/f1_predictor.egg-info/SOURCES.txt
 src/f1_predictor.egg-info/dependency_links.txt

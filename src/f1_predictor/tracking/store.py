@@ -1,21 +1,22 @@
-"""store.py — SQLite persistence for race and championship prediction
+"""store.py — SQLite persistence for session and championship prediction
 track records. Mirrors PL_Predictor's tracking/store.py: snapshot each
 prediction BEFORE the outcome is known, reconcile against actual results
 once they land — the only honest way to measure "how good are the
 predictions really," and this project's substitute for the market
 comparison PL_Predictor's value-bet feature relies on (there is no F1 odds
-market — see RESEARCH_BRIEF.md). Comparing predictions across tiers
-(pre_weekend -> post_practice -> post_qualifying) tells the "is this
-actually working" story instead.
+market — see RESEARCH_BRIEF.md).
 
-`race_predictions` is keyed on (season, round, driver_id, tier, market) —
-the one real schema difference from PL_Predictor: a round legitimately
-gets up to 3 snapshots (one per tier) before it's reconciled, not just one.
-`championship_snapshots` records one row per driver/constructor each time
-models/championship_projection.py::simulate_season reruns, for a "how has
-our title-race view evolved" trend. No live in-race snapshot table —
-lap-cadence data isn't worth persisting; the live engine (Phase 3) is
-validated offline against historical replay instead.
+`session_predictions` generalizes the original race-only
+`race_predictions` table to all four session types (sprint_qualifying,
+qualifying, sprint, race) — keyed on (season, round, session_type,
+driver_id, tier, market). A migration on first connect carries every
+existing race_predictions row over with session_type='race' and
+actual_finish_position renamed to actual_position; expected_position is
+left NULL for those old rows since it was never actually predicted at the
+time (not fabricated retroactively — same honesty rule the rest of this
+app follows).
+
+`championship_snapshots` is unchanged from before this migration.
 """
 
 from __future__ import annotations
@@ -27,38 +28,44 @@ import pandas as pd
 
 from ..config import TRACKING_DB_PATH
 
-MARKET_SPEC = [
-    ("win", "p_win"),
-    ("podium", "p_podium"),
-    ("points_finish", "p_points_finish"),
-    ("dnf", "p_dnf"),
-]
+# Probability-market column names on the sim_table DataFrame are always
+# p_win/p_podium/p_points_finish/p_dnf regardless of session type (see
+# models/session_outcome.py::predict_session) — only the STORED market
+# name differs, and quali-type sessions have no dnf market at all.
+SESSION_MARKET_SPEC: dict[str, list[tuple[str, str]]] = {
+    "race": [("win", "p_win"), ("podium", "p_podium"), ("points_finish", "p_points_finish"), ("dnf", "p_dnf")],
+    "sprint": [("win", "p_win"), ("podium", "p_podium"), ("points_finish", "p_points_finish"), ("dnf", "p_dnf")],
+    "qualifying": [("pole", "p_win"), ("top_3", "p_podium"), ("top_10", "p_points_finish")],
+    "sprint_qualifying": [("pole", "p_win"), ("top_3", "p_podium"), ("top_10", "p_points_finish")],
+}
 
 
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(TRACKING_DB_PATH))
     conn.execute(
         """
-        CREATE TABLE IF NOT EXISTS race_predictions (
+        CREATE TABLE IF NOT EXISTS session_predictions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             season INTEGER NOT NULL,
             round INTEGER NOT NULL,
             race_name TEXT NOT NULL,
+            session_type TEXT NOT NULL,
             driver_id TEXT NOT NULL,
             constructor_id TEXT,
             tier TEXT NOT NULL,
             market TEXT NOT NULL,
             predicted_prob REAL NOT NULL,
+            expected_position REAL,
             session_time TEXT NOT NULL,
             snapshotted_at TEXT NOT NULL,
             model_trained_at TEXT,
             resolved INTEGER NOT NULL DEFAULT 0,
             actual_outcome INTEGER,
-            actual_finish_position INTEGER,
+            actual_position INTEGER,
             actual_dnf INTEGER,
             resolved_at TEXT,
             backfilled INTEGER NOT NULL DEFAULT 0,
-            UNIQUE(season, round, driver_id, tier, market)
+            UNIQUE(season, round, session_type, driver_id, tier, market)
         )
         """
     )
@@ -79,40 +86,75 @@ def _connect() -> sqlite3.Connection:
         )
         """
     )
+    _migrate_legacy_race_predictions(conn)
     return conn
 
 
-def record_race_predictions(
+def _migrate_legacy_race_predictions(conn: sqlite3.Connection) -> None:
+    """One-time, idempotent migration: if an old race_predictions table
+    exists (pre-dating session_predictions), copy every row over with
+    session_type='race' and actual_finish_position renamed to
+    actual_position, then drop it. Safe to run on every connect — a no-op
+    once the old table is gone."""
+    exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='race_predictions'"
+    ).fetchone()
+    if not exists:
+        return
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO session_predictions
+            (season, round, race_name, session_type, driver_id, constructor_id, tier, market,
+             predicted_prob, expected_position, session_time, snapshotted_at, model_trained_at,
+             resolved, actual_outcome, actual_position, actual_dnf, resolved_at, backfilled)
+        SELECT
+            season, round, race_name, 'race', driver_id, constructor_id, tier, market,
+            predicted_prob, NULL, session_time, snapshotted_at, model_trained_at,
+            resolved, actual_outcome, actual_finish_position, actual_dnf, resolved_at, backfilled
+        FROM race_predictions
+        """
+    )
+    conn.execute("DROP TABLE race_predictions")
+    conn.commit()
+
+
+def record_session_predictions(
     sim_table: pd.DataFrame,
     season: int,
     round_: int,
     race_name: str,
+    session_type: str,
     tier: str,
     session_time: str,
     model_trained_at: str | None = None,
     backfilled: bool = False,
 ) -> int:
-    """Snapshot one race's Monte Carlo output (models/race_outcome.py::
-    simulate_race's return, with a constructor_id column already joined on
-    by the caller) for a given tier. Already-logged (season, round,
-    driver_id, tier, market) rows are left untouched — safe to call every
-    time a prediction is served."""
+    """Snapshot one session's Monte Carlo output (models/session_outcome.py
+    ::predict_session's or race_outcome.py::simulate_race's return, with a
+    constructor_id column already joined on by the caller). Already-logged
+    (season, round, session_type, driver_id, tier, market) rows are left
+    untouched — safe to call every time a prediction is served."""
     if sim_table.empty:
         return 0
+    market_spec = SESSION_MARKET_SPEC[session_type]
     now = datetime.now(timezone.utc).isoformat()
     rows = []
     for _, r in sim_table.iterrows():
-        for market, prob_col in MARKET_SPEC:
+        expected_position = r.get("expected_position")
+        expected_position = None if expected_position is None or pd.isna(expected_position) else float(expected_position)
+        for market, prob_col in market_spec:
             rows.append(
                 (
                     season,
                     round_,
                     race_name,
+                    session_type,
                     r["driver_id"],
                     r.get("constructor_id"),
                     tier,
                     market,
                     float(r[prob_col]),
+                    expected_position,
                     session_time,
                     now,
                     model_trained_at,
@@ -122,34 +164,39 @@ def record_race_predictions(
     with _connect() as conn:
         cur = conn.executemany(
             """
-            INSERT OR IGNORE INTO race_predictions
-                (season, round, race_name, driver_id, constructor_id, tier, market, predicted_prob,
-                 session_time, snapshotted_at, model_trained_at, backfilled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO session_predictions
+                (season, round, race_name, session_type, driver_id, constructor_id, tier, market,
+                 predicted_prob, expected_position, session_time, snapshotted_at, model_trained_at, backfilled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
         return cur.rowcount
 
 
-def _actual_outcome(market: str, driver_row: pd.Series) -> int:
+def _actual_outcome(session_type: str, market: str, driver_row: pd.Series) -> int:
     position = driver_row.get("position")
     has_position = position is not None and not pd.isna(position)
-    if market == "win":
+    if market in ("win", "pole"):
         return int(has_position and int(position) == 1)
-    if market == "podium":
+    if market in ("podium", "top_3"):
         return int(has_position and int(position) <= 3)
     if market == "points_finish":
+        cutoff = 8 if session_type == "sprint" else 10
+        return int(has_position and int(position) <= cutoff)
+    if market == "top_10":
         return int(has_position and int(position) <= 10)
     if market == "dnf":
         return int(bool(driver_row.get("dnf")))
     raise ValueError(f"unknown market: {market}")
 
 
-def reconcile_predictions(results_df: pd.DataFrame) -> int:
-    """Fills in actual outcomes for every still-unresolved race_predictions
-    row whose (season, round, driver_id) now has a real result in
-    `results_df`. Safe to call repeatedly — only touches resolved=0 rows."""
+def reconcile_session_predictions(results_df: pd.DataFrame, session_type: str) -> int:
+    """Fills in actual outcomes for every still-unresolved session_predictions
+    row of `session_type` whose (season, round, driver_id) now has a real
+    result in `results_df` (columns: season, round, driver_id, position,
+    and dnf for race/sprint). Safe to call repeatedly — only touches
+    resolved=0 rows."""
     if results_df.empty:
         return 0
     now = datetime.now(timezone.utc).isoformat()
@@ -157,7 +204,10 @@ def reconcile_predictions(results_df: pd.DataFrame) -> int:
 
     with _connect() as conn:
         unresolved = pd.read_sql(
-            "SELECT id, season, round, driver_id, market FROM race_predictions WHERE resolved = 0", conn
+            "SELECT id, season, round, driver_id, market FROM session_predictions "
+            "WHERE resolved = 0 AND session_type = ?",
+            conn,
+            params=(session_type,),
         )
         if unresolved.empty:
             return 0
@@ -168,15 +218,15 @@ def reconcile_predictions(results_df: pd.DataFrame) -> int:
             if key not in results_lookup.index:
                 continue
             driver_row = results_lookup.loc[key]
-            if isinstance(driver_row, pd.DataFrame):  # duplicate key guard, shouldn't happen
+            if isinstance(driver_row, pd.DataFrame):
                 driver_row = driver_row.iloc[0]
-            actual = _actual_outcome(row["market"], driver_row)
+            actual = _actual_outcome(session_type, row["market"], driver_row)
             position = driver_row.get("position")
             updates.append(
                 (
                     actual,
                     None if position is None or pd.isna(position) else int(position),
-                    int(bool(driver_row.get("dnf"))),
+                    int(bool(driver_row.get("dnf"))) if "dnf" in driver_row else None,
                     now,
                     int(row["id"]),
                 )
@@ -185,8 +235,8 @@ def reconcile_predictions(results_df: pd.DataFrame) -> int:
         if updates:
             conn.executemany(
                 """
-                UPDATE race_predictions
-                SET resolved = 1, actual_outcome = ?, actual_finish_position = ?, actual_dnf = ?, resolved_at = ?
+                UPDATE session_predictions
+                SET resolved = 1, actual_outcome = ?, actual_position = ?, actual_dnf = ?, resolved_at = ?
                 WHERE id = ?
                 """,
                 updates,
@@ -227,26 +277,29 @@ def record_championship_snapshot(projection: dict) -> int:
         return cur.rowcount
 
 
-def get_track_record(tier: str | None = None) -> dict:
+def get_session_track_record(session_type: str | None = None, tier: str | None = None) -> dict:
     """Overall hit-rate/calibration summary, optionally filtered to one
-    tier — the "predictions get sharper tier by tier" story that
-    substitutes for the missing odds-market comparison."""
+    session type and/or tier."""
     with _connect() as conn:
-        query = "SELECT tier, market, predicted_prob, actual_outcome FROM race_predictions WHERE resolved = 1"
-        params: tuple = ()
+        query = "SELECT session_type, tier, market, predicted_prob, actual_outcome FROM session_predictions WHERE resolved = 1"
+        params: list = []
+        if session_type:
+            query += " AND session_type = ?"
+            params.append(session_type)
         if tier:
             query += " AND tier = ?"
-            params = (tier,)
+            params.append(tier)
         df = pd.read_sql(query, conn, params=params)
 
     if df.empty:
         return {"n_resolved": 0, "by_market": []}
 
     rows = []
-    for (t, market), g in df.groupby(["tier", "market"]):
+    for (st, t, market), g in df.groupby(["session_type", "tier", "market"]):
         brier = float(((g["predicted_prob"] - g["actual_outcome"]) ** 2).mean())
         rows.append(
             {
+                "session_type": st,
                 "tier": t,
                 "market": market,
                 "n": int(len(g)),
@@ -258,35 +311,36 @@ def get_track_record(tier: str | None = None) -> dict:
     return {"n_resolved": int(len(df)), "by_market": rows}
 
 
-def get_race_accuracy(tier: str | None = None) -> list[dict]:
-    """Per-race accuracy: did the model's own top pick actually win, and
-    how many of its predicted top-3/top-10 actually landed there — the
-    "did it call the right positions" question the aggregate Brier/hit-
-    rate numbers in get_track_record() don't directly answer (a
-    well-calibrated 9% win probability is "correct" even when that driver
-    doesn't win most of the time; this asks the more literal question)."""
+def get_session_accuracy(session_type: str | None = None, tier: str | None = None) -> list[dict]:
+    """Per-session accuracy: did the model's own top pick actually land
+    there — mirrors the old get_race_accuracy, generalized across markets
+    per session type via SESSION_MARKET_SPEC."""
+    top_n_by_market = {"win": 1, "pole": 1, "podium": 3, "top_3": 3, "points_finish": 10, "top_10": 10}
     with _connect() as conn:
         query = (
-            "SELECT season, round, race_name, tier, driver_id, market, predicted_prob, actual_outcome "
-            "FROM race_predictions WHERE resolved = 1 AND market IN ('win', 'podium', 'points_finish')"
+            "SELECT season, round, race_name, session_type, tier, driver_id, market, predicted_prob, actual_outcome "
+            "FROM session_predictions WHERE resolved = 1 AND market != 'dnf'"
         )
-        params: tuple = ()
+        params: list = []
+        if session_type:
+            query += " AND session_type = ?"
+            params.append(session_type)
         if tier:
             query += " AND tier = ?"
-            params = (tier,)
+            params.append(tier)
         df = pd.read_sql(query, conn, params=params)
 
     if df.empty:
         return []
 
-    top_n = {"win": 1, "podium": 3, "points_finish": 10}
     rows = []
-    for (season, round_, race_name, t), race_df in df.groupby(["season", "round", "race_name", "tier"]):
-        row = {"season": int(season), "round": int(round_), "race_name": race_name, "tier": t}
-        for market, n in top_n.items():
-            market_df = race_df[race_df["market"] == market]
-            if market_df.empty:
+    for (season, round_, race_name, st, t), race_df in df.groupby(["season", "round", "race_name", "session_type", "tier"]):
+        row = {"season": int(season), "round": int(round_), "race_name": race_name, "session_type": st, "tier": t}
+        for market in race_df["market"].unique():
+            n = top_n_by_market.get(market)
+            if n is None:
                 continue
+            market_df = race_df[race_df["market"] == market]
             predicted = set(market_df.nlargest(n, "predicted_prob")["driver_id"])
             actual = set(market_df.loc[market_df["actual_outcome"] == 1, "driver_id"])
             row[f"{market}_predicted"] = sorted(predicted)
@@ -298,10 +352,10 @@ def get_race_accuracy(tier: str | None = None) -> list[dict]:
     return sorted(rows, key=lambda r: (r["season"], r["round"]), reverse=True)
 
 
-def get_race_prediction(season: int, round_: int, tier: str | None = None) -> list[dict]:
+def get_session_prediction(season: int, round_: int, session_type: str, tier: str | None = None) -> list[dict]:
     with _connect() as conn:
-        query = "SELECT * FROM race_predictions WHERE season = ? AND round = ?"
-        params: list = [season, round_]
+        query = "SELECT * FROM session_predictions WHERE season = ? AND round = ? AND session_type = ?"
+        params: list = [season, round_, session_type]
         if tier:
             query += " AND tier = ?"
             params.append(tier)
