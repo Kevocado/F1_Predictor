@@ -28,6 +28,24 @@ TIER_POST_QUALIFYING = "post_qualifying"
 
 TIER_ORDER = [TIER_PRE_WEEKEND, TIER_POST_PRACTICE, TIER_POST_QUALIFYING]
 
+# Wider tier chain for the three new session predictors (sprint_qualifying/
+# qualifying/sprint) — separate from TIER_ORDER above, which is the race
+# model's own 3-tier list and is untouched by this addition. Each of the
+# three new session types has exactly one fixed feature-availability point
+# (see models/session_outcome.py::SessionSpec), so this list is used only
+# for the "what tier is this weekend in right now" label, never for
+# tier_augment-style row masking.
+TIER_POST_SPRINT_QUALIFYING = "post_sprint_qualifying"
+TIER_POST_SPRINT = "post_sprint"
+
+SESSION_TIER_ORDER = [
+    TIER_PRE_WEEKEND,
+    TIER_POST_PRACTICE,
+    TIER_POST_SPRINT_QUALIFYING,
+    TIER_POST_SPRINT,
+    TIER_POST_QUALIFYING,
+]
+
 # Columns newly unlocked at each tier (cumulative — a later tier keeps
 # everything an earlier one had). Phase 1 has no FastF1-derived practice
 # session columns yet (data/fastf1_client.py is Phase 3), so POST_PRACTICE
@@ -85,6 +103,35 @@ def current_tier(schedule_row: pd.Series, now: pd.Timestamp | None = None) -> st
         return TIER_POST_QUALIFYING
 
     practice_cols = ["fp1_datetime", "fp2_datetime", "fp3_datetime", "sprint_quali_datetime"]
+    practice_dts = [schedule_row.get(c) for c in practice_cols if pd.notna(schedule_row.get(c))]
+    if practice_dts and now >= min(practice_dts):
+        return TIER_POST_PRACTICE
+
+    return TIER_PRE_WEEKEND
+
+
+def current_session_tier(schedule_row: pd.Series, now: pd.Timestamp | None = None) -> str:
+    """Like current_tier, but resolves the wider SESSION_TIER_ORDER chain —
+    distinguishes "sprint qualifying has happened" and "the sprint has
+    happened" as their own tiers, which current_tier (race-model-only)
+    deliberately doesn't. On a non-sprint weekend, sprint_quali_datetime/
+    sprint_datetime are both None, so this collapses to exactly current_tier's
+    3-tier behavior."""
+    now = now if now is not None else pd.Timestamp.now(tz="UTC")
+
+    quali_dt = schedule_row.get("qualifying_datetime")
+    if pd.notna(quali_dt) and now >= quali_dt:
+        return TIER_POST_QUALIFYING
+
+    sprint_dt = schedule_row.get("sprint_datetime")
+    if pd.notna(sprint_dt) and now >= sprint_dt:
+        return TIER_POST_SPRINT
+
+    sprint_quali_dt = schedule_row.get("sprint_quali_datetime")
+    if pd.notna(sprint_quali_dt) and now >= sprint_quali_dt:
+        return TIER_POST_SPRINT_QUALIFYING
+
+    practice_cols = ["fp1_datetime", "fp2_datetime", "fp3_datetime"]
     practice_dts = [schedule_row.get(c) for c in practice_cols if pd.notna(schedule_row.get(c))]
     if practice_dts and now >= min(practice_dts):
         return TIER_POST_PRACTICE
