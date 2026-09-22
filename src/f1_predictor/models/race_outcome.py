@@ -138,11 +138,21 @@ def simulate_race(
     dnf_prob: dict[str, float] | None = None,
     n_trials: int = 10000,
     seed: int = 0,
+    points_table: dict[int, float] | None = None,
+    points_finish_cutoff: int = 10,
 ) -> pd.DataFrame:
     """Runs `draw_classification` n_trials times and aggregates into one
-    row per driver: p_win, p_podium, p_points_finish (top 10), p_dnf,
-    expected_position, expected_points — requirement 1's four targets (DNF
-    reported both here and standalone from models/dnf.py directly)."""
+    row per driver: p_win, p_podium, p_points_finish (top
+    `points_finish_cutoff`), p_dnf, expected_position, expected_points —
+    requirement 1's four targets (DNF reported both here and standalone
+    from models/dnf.py directly). `points_table`/`points_finish_cutoff`
+    default to the main race's values (POINTS_TABLE, top 10) — pass
+    session_outcome.py's SPRINT_POINTS_TABLE/cutoff=8 for a sprint, or
+    leave both at their default for a session with no real points concept
+    (qualifying-type sessions still get a `points_finish`-shaped market at
+    the default top-10 cutoff, reinterpreted by the caller as "reached
+    Q3"/"top_10" rather than literal points)."""
+    points_table = points_table or POINTS_TABLE
     dnf_prob = dnf_prob or {}
     rng = np.random.default_rng(seed)
     drivers = list(theta.keys())
@@ -161,9 +171,9 @@ def simulate_race(
                 win[d] += 1
             if pos <= 3:
                 podium[d] += 1
-            if pos <= 10:
+            if pos <= points_finish_cutoff:
                 points_finish[d] += 1
-                points_sum[d] += POINTS_TABLE[pos]
+                points_sum[d] += points_table.get(pos, 0.0)
         for d in dnfd:
             dnf_ct[d] += 1
 
