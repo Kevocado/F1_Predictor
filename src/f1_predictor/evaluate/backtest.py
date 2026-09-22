@@ -15,11 +15,13 @@ import argparse
 import pandas as pd
 
 from ..data import jolpica
+from ..features import session_build
 from ..features import session_state
 from ..features.build import build_training_frame
 from ..models import dnf as dnf_model
 from ..models import manifest as manifest_module
 from ..models import race_outcome
+from ..models import session_outcome
 
 
 def backtest_race(season: int, round_: int, seasons: list[int] | None = None) -> pd.DataFrame:
@@ -60,6 +62,42 @@ def backtest_race(season: int, round_: int, seasons: list[int] | None = None) ->
     sim = race_outcome.simulate_race(theta, dnf_prob=dnf_prob, n_trials=10000, seed=0)
 
     actual = race_df.set_index("driver_id")[["constructor_id", "position", "grid", "dnf", "points"]]
+    result = sim.set_index("driver_id").join(actual, how="left").reset_index()
+    return result.sort_values("p_win", ascending=False).reset_index(drop=True)
+
+
+def backtest_session(
+    season: int, round_: int, session_type: str = "race", seasons: list[int] | None = None
+) -> pd.DataFrame:
+    """Generalizes backtest_race's no-lookahead replay to the three new
+    session types. session_type="race" is a pure passthrough to
+    backtest_race (unchanged, still the race model's own path) — this
+    function exists so callers (api/routes.py) can use one name regardless
+    of session_type."""
+    if session_type == "race":
+        return backtest_race(season, round_, seasons=seasons)
+
+    seasons = seasons or jolpica.default_seasons()
+    spec = session_outcome.SESSION_SPECS[session_type]
+    df, feature_cols = session_build.build_session_training_frame(session_type, seasons=seasons)
+
+    before = (df["season"] < season) | ((df["season"] == season) & (df["round"] < round_))
+    train_df = df[before]
+    session_df = df[(df["season"] == season) & (df["round"] == round_)]
+    if session_df.empty:
+        raise ValueError(f"No {session_type} data found for {season} round {round_}")
+
+    ranker = session_outcome.train_session_ranker(train_df, feature_cols, spec)
+    dnf_clf = None
+    if spec.has_dnf:
+        dnf_clf = dnf_model.train_dnf_model(train_df, feature_cols)
+
+    sim = session_outcome.predict_session(ranker, session_df, feature_cols, spec, dnf_clf=dnf_clf, n_trials=10000, seed=0)
+
+    actual_cols = ["constructor_id", spec.target_column]
+    if spec.has_dnf:
+        actual_cols.append("dnf")
+    actual = session_df.set_index("driver_id")[actual_cols].rename(columns={spec.target_column: "position"})
     result = sim.set_index("driver_id").join(actual, how="left").reset_index()
     return result.sort_values("p_win", ascending=False).reset_index(drop=True)
 
