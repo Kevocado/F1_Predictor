@@ -358,6 +358,16 @@ def _session_prediction_bundle(season: int, round_: int, race_row: pd.Series, se
 
 
 def _get_session_prediction_response(season: int, round_: int, session_type: str) -> SessionPredictionResponse:
+    if PUBLIC_MODE:
+        snap = _snapshot_for_season(season)
+        if snap is not None:
+            pred = snap.get("session_predictions", {}).get(session_type, {}).get(str(round_))
+            if pred is not None:
+                return pred
+    return _get_session_prediction_live(season, round_, session_type)
+
+
+def _get_session_prediction_live(season: int, round_: int, session_type: str) -> SessionPredictionResponse:
     schedule = jolpica.fetch_season_schedule(season)
     race_rows = schedule[schedule["round"] == round_]
     if race_rows.empty:

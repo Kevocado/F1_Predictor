@@ -1,11 +1,17 @@
 name: Refresh public snapshot
 
 # Runs public_snapshot.py on GitHub's own infrastructure and pushes
-# data/public_snapshot.json if it changed. The deploy workflow ignores
-# this path (see deploy-azure.yml's paths-ignore) -- the running
-# container instead picks the new snapshot up within
-# PUBLIC_SNAPSHOT_POLL_SECONDS by polling this file's raw GitHub URL (see
-# api/routes.py::refresh_public_snapshot_from_remote), no redeploy needed.
+# data/public_snapshot.json + data/tracking.db if either changed. The
+# deploy workflow ignores the snapshot path (see deploy-azure.yml's
+# paths-ignore) -- the running container instead picks up the new
+# public_snapshot.json within PUBLIC_SNAPSHOT_POLL_SECONDS by polling this
+# file's raw GitHub URL (see api/routes.py::refresh_public_snapshot_from_remote),
+# no redeploy needed. tracking.db has no equivalent live-poll path (it's a
+# SQLite file, not a small JSON blob to fetch-and-swap) -- an updated
+# tracking.db only reaches the running deployment on its next deploy, an
+# accepted lag, not a bug. public_snapshot.py itself does the actual
+# snapshot-then-reconcile work against tracking.db on every run of this
+# workflow (see its module docstring) -- this step only commits the result.
 
 on:
   schedule:
@@ -49,12 +55,13 @@ jobs:
 
       - name: Commit and push if changed
         run: |
-          if git diff --quiet -- data/public_snapshot.json; then
-            echo "No change, nothing to push."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/public_snapshot.json
-          git commit -m "Refresh public snapshot [automated]"
+          git add -f data/tracking.db
+          if git diff --cached --quiet; then
+            echo "No change, nothing to push."
+            exit 0
+          fi
+          git commit -m "Refresh public snapshot + track record [automated]"
           git push

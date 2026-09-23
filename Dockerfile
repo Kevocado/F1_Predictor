@@ -38,7 +38,8 @@ RUN pip install --no-cache-dir -e .
 # commit that added them for exactly this reason). optuna_studies.db is
 # tuning-only tooling state, not a serving artifact — deliberately not
 # shipped.
-COPY models/manifest.json models/dnf_model.json models/live_win_model.json models/live_podium_model.json models/race_outcome_ranker.json ./models/
+COPY models/manifest.json models/dnf_model.json models/live_win_model.json models/live_podium_model.json models/race_outcome_ranker.json \
+     models/sprint_qualifying_ranker.json models/qualifying_ranker.json models/sprint_ranker.json models/sprint_dnf_model.json ./models/
 
 # Ships the immutable past-season (2019-2025) jolpica cache — confirmed via
 # a real production 429 that a cold container (Render's disk is ephemeral;
@@ -54,6 +55,13 @@ COPY data/cache/jolpica/ ./data/cache/jolpica/
 # (`python -m f1_predictor.public_snapshot`) and committed, not built in
 # this image. Must exist before building.
 COPY data/public_snapshot.json ./data/public_snapshot.json
+# The honest prediction track record (tracking/store.py's session_predictions
+# table) -- force-added past .gitignore's `data/tracking.db`, same reasoning
+# as the model files above: Azure Container Apps has no persistent volume
+# between deploys, so without shipping this file in the image, every deploy
+# would silently wipe Track Record back to empty. Kept current by the same
+# refresh-public-snapshot.yml GitHub Action, not built in this image.
+COPY data/tracking.db ./data/tracking.db
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 EXPOSE 8000
