@@ -25,12 +25,14 @@ from ..config import (
 from ..data import jolpica
 from ..evaluate import backtest as backtest_lib
 from ..features import build as build_features
+from ..features import session_build
 from ..features import session_state
 from ..models import championship_projection
 from ..models import dnf as dnf_model
 from ..models import explain as explain_lib
 from ..models import manifest as manifest_module
 from ..models import race_outcome
+from ..models import session_outcome
 from ..tracking import store
 from .schemas import (
     ChampionshipEntry,
@@ -41,6 +43,8 @@ from .schemas import (
     RaceAccuracyEntry,
     RacePredictionResponse,
     RaceSummary,
+    SessionDriverPrediction,
+    SessionPredictionResponse,
     TrackRecordEntry,
     TrackRecordResponse,
 )
@@ -110,6 +114,9 @@ _CACHE_TTL_SECONDS = 1800
 # same reasoning as PL_Predictor's _LIVE_CACHE_TTL_SECONDS.
 _LIVE_CACHE_TTL_SECONDS = 300
 _cache: dict[str, tuple[float, object]] = {}
+
+_QUALI_MARKET_FIELDS = ("p_pole", "p_top_3", "p_top_10")
+_RACE_MARKET_FIELDS = ("p_win", "p_podium", "p_points_finish", "p_dnf")
 
 
 def _cached(key: str, build_fn, ttl: float = _CACHE_TTL_SECONDS):
@@ -210,7 +217,7 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
     no-lookahead reconstruction (evaluate/backtest.py) if nothing was ever
     snapshotted — same "backfilled" gap PL_Predictor's tracking store
     handles explicitly rather than silently."""
-    tracked = store.get_race_prediction(season, round_, tier=session_state.TIER_POST_QUALIFYING)
+    tracked = store.get_session_prediction(season, round_, "race", tier=session_state.TIER_POST_QUALIFYING)
     if tracked:
         df = pd.DataFrame(tracked)
         # Pivot on driver_id alone (not also constructor_id) — a NULL
@@ -223,8 +230,7 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
         pivot = pivot.rename(
             columns={"win": "p_win", "podium": "p_podium", "points_finish": "p_points_finish", "dnf": "p_dnf"}
         )
-        extra = df.drop_duplicates("driver_id")[["driver_id", "constructor_id", "actual_finish_position", "actual_dnf"]]
-        extra = extra.rename(columns={"actual_finish_position": "actual_position"})
+        extra = df.drop_duplicates("driver_id")[["driver_id", "constructor_id", "actual_position", "actual_dnf"]]
         pivot = pivot.merge(extra, on="driver_id", how="left")
         pivot["expected_position"] = float("nan")
         pivot["expected_points"] = float("nan")
@@ -233,6 +239,151 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
     result = backtest_lib.backtest_race(season, round_)
     result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
     return result, session_state.TIER_POST_QUALIFYING, "backtest"
+
+
+def _session_is_completed(season: int, round_: int, session_type: str, race_row: pd.Series, now: pd.Timestamp) -> bool:
+    """Like _race_is_completed, generalized: a session is only "completed"
+    once real results exist for it, never merely once its scheduled time
+    has passed."""
+    if session_type == "race":
+        return _race_is_completed(season, round_, race_row.get("race_datetime"), now)
+    if session_type in ("sprint", "sprint_qualifying"):
+        session_dt = race_row.get("sprint_datetime" if session_type == "sprint" else "sprint_quali_datetime")
+        if pd.isna(session_dt) or session_dt > now:
+            return False
+        return not jolpica.load_season_sprints(season)[
+            jolpica.load_season_sprints(season)["round"] == round_
+        ].empty
+    # "qualifying"
+    quali_dt = race_row.get("qualifying_datetime")
+    if pd.isna(quali_dt) or quali_dt > now:
+        return False
+    return not jolpica.fetch_qualifying(season, round_).empty
+
+
+def _current_session_feature_row(season: int, round_: int, race_row: pd.Series, session_type: str) -> pd.DataFrame:
+    """The live "what's known right now" feature frame for an UPCOMING
+    session, built the same way _future_feature_frame builds the race
+    model's: championship_projection.build_future_feature_rows for the
+    Elo/team-strength/form/circuit/weather base, then real
+    session-specific columns merged in if already available this weekend."""
+    schedule = jolpica.fetch_season_schedule(season)
+    race_schedule = schedule[schedule["round"] == round_]
+    results_df = jolpica.load_season_results(season)
+    driver_ids = jolpica.fetch_driver_standings(season)["driver_id"].tolist()
+    future_df = championship_projection.build_future_feature_rows(season, race_schedule, results_df, schedule, driver_ids)
+
+    sprint_results = jolpica.load_season_sprints(season)
+    sprint_this_round = sprint_results[sprint_results["round"] == round_] if not sprint_results.empty else sprint_results
+
+    if session_type == "qualifying":
+        future_df["sprint_finish_position"] = float("nan")
+        if not sprint_this_round.empty:
+            m = sprint_this_round.set_index("driver_id")["position"]
+            future_df["sprint_finish_position"] = future_df["driver_id"].map(m)
+    elif session_type == "sprint":
+        future_df["sprint_quali_position"] = float("nan")
+        if not sprint_this_round.empty:
+            m = sprint_this_round.set_index("driver_id")["grid"]
+            future_df["sprint_quali_position"] = future_df["driver_id"].map(m)
+    return future_df
+
+
+def _load_session_models(session_type: str) -> tuple:
+    model_path, dnf_path = manifest_module.SESSION_MODEL_PATHS[session_type]
+    if not model_path.exists():
+        raise HTTPException(status_code=409, detail=f"No trained {session_type} model yet — call POST /api/retrain first.")
+    ranker = xgb.XGBRanker()
+    ranker.load_model(str(model_path))
+    dnf_clf = None
+    if dnf_path is not None and dnf_path.exists():
+        dnf_clf = xgb.XGBClassifier()
+        dnf_clf.load_model(str(dnf_path))
+    return ranker, dnf_clf
+
+
+def _predict_upcoming_session(season: int, round_: int, race_row: pd.Series, session_type: str) -> tuple[pd.DataFrame, str]:
+    spec = session_outcome.SESSION_SPECS[session_type]
+    feature_cols = session_build.SESSION_FEATURE_COLUMNS[session_type]
+    future_df = _current_session_feature_row(season, round_, race_row, session_type)
+    ranker, dnf_clf = _load_session_models(session_type)
+    sim = session_outcome.predict_session(ranker, future_df, feature_cols, spec, dnf_clf=dnf_clf, n_trials=10000)
+    constructor_lookup = future_df.set_index("driver_id")["constructor_id"]
+    sim["constructor_id"] = sim["driver_id"].map(constructor_lookup)
+    tier = session_state.current_session_tier(race_row)
+    return sim, tier
+
+
+def _completed_session_prediction(season: int, round_: int, session_type: str) -> tuple[pd.DataFrame, str, str]:
+    spec = session_outcome.SESSION_SPECS[session_type]
+    tracked = store.get_session_prediction(season, round_, session_type, tier=spec.feature_cutoff_tier)
+    if tracked:
+        df = pd.DataFrame(tracked)
+        pivot = df.pivot_table(index="driver_id", columns="market", values="predicted_prob", aggfunc="first").reset_index()
+        market_spec = store.SESSION_MARKET_SPEC[session_type]
+        pivot = pivot.rename(columns={market: prob_col for market, prob_col in market_spec})
+        extra = df.drop_duplicates("driver_id")[["driver_id", "constructor_id", "actual_position", "actual_dnf"]]
+        pivot = pivot.merge(extra, on="driver_id", how="left")
+        pivot["expected_position"] = float("nan")
+        return pivot, spec.feature_cutoff_tier, "tracked"
+
+    result = backtest_lib.backtest_session(season, round_, session_type=session_type)
+    result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
+    return result, spec.feature_cutoff_tier, "backtest"
+
+
+def _session_prediction_bundle(season: int, round_: int, race_row: pd.Series, session_type: str, completed: bool) -> tuple[pd.DataFrame, str, str]:
+    if completed:
+        try:
+            return _completed_session_prediction(season, round_, session_type)
+        except ValueError:
+            pass
+    sim, tier = _predict_upcoming_session(season, round_, race_row, session_type)
+    return sim, tier, "live"
+
+
+def _get_session_prediction_response(season: int, round_: int, session_type: str) -> SessionPredictionResponse:
+    schedule = jolpica.fetch_season_schedule(season)
+    race_rows = schedule[schedule["round"] == round_]
+    if race_rows.empty:
+        raise HTTPException(status_code=404, detail=f"No such race: {season} round {round_}")
+    race_row = race_rows.iloc[0]
+
+    if session_type in ("sprint", "sprint_qualifying") and not bool(race_row["is_sprint_weekend"]):
+        raise HTTPException(status_code=404, detail=f"{season} round {round_} is not a sprint weekend")
+
+    now = pd.Timestamp.now(tz="UTC")
+    completed = _session_is_completed(season, round_, session_type, race_row, now)
+
+    sim, tier, source = _cached(
+        f"session_prediction_{session_type}_{season}_{round_}",
+        lambda: _session_prediction_bundle(season, round_, race_row, session_type, completed),
+        ttl=_LIVE_CACHE_TTL_SECONDS,
+    )
+
+    is_quali_type = session_type in ("sprint_qualifying", "qualifying")
+    predictions = []
+    for _, r in sim.sort_values("p_win", ascending=False).iterrows():
+        kwargs = dict(
+            driver_id=r["driver_id"],
+            constructor_id=r.get("constructor_id"),
+            expected_position=float(r["expected_position"]) if pd.notna(r.get("expected_position")) else float("nan"),
+            actual_position=None if pd.isna(r.get("actual_position")) else int(r.get("actual_position")),
+            actual_dnf=None if pd.isna(r.get("actual_dnf")) else bool(r.get("actual_dnf")),
+        )
+        if is_quali_type:
+            kwargs.update(p_pole=float(r["p_win"]), p_top_3=float(r["p_podium"]), p_top_10=float(r["p_points_finish"]))
+        else:
+            kwargs.update(
+                p_win=float(r["p_win"]), p_podium=float(r["p_podium"]),
+                p_points_finish=float(r["p_points_finish"]), p_dnf=float(r["p_dnf"]),
+            )
+        predictions.append(SessionDriverPrediction(**kwargs))
+
+    return SessionPredictionResponse(
+        season=season, round=round_, race_name=race_row["race_name"], session_type=session_type,
+        tier=tier, source=source, predictions=predictions,
+    )
 
 
 def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFrame, list[str]]:
@@ -367,6 +518,21 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     )
 
 
+@router.get("/races/{season}/{round_}/sprint-qualifying-prediction", response_model=SessionPredictionResponse)
+def get_sprint_qualifying_prediction(season: int, round_: int) -> SessionPredictionResponse:
+    return _get_session_prediction_response(season, round_, "sprint_qualifying")
+
+
+@router.get("/races/{season}/{round_}/sprint-prediction", response_model=SessionPredictionResponse)
+def get_sprint_prediction(season: int, round_: int) -> SessionPredictionResponse:
+    return _get_session_prediction_response(season, round_, "sprint")
+
+
+@router.get("/races/{season}/{round_}/qualifying-prediction", response_model=SessionPredictionResponse)
+def get_qualifying_prediction(season: int, round_: int) -> SessionPredictionResponse:
+    return _get_session_prediction_response(season, round_, "qualifying")
+
+
 @router.get("/races/{season}/{round_}/explain", response_model=ExplainResponse)
 def explain_prediction(season: int, round_: int, driver_id: str) -> ExplainResponse:
     """What's driving this driver's prediction — one explanation for
@@ -429,16 +595,15 @@ def _get_championship_live(championship: str, season: int, n_trials: int) -> Cha
 
 
 @router.get("/track-record", response_model=TrackRecordResponse)
-def get_track_record(tier: str | None = None) -> TrackRecordResponse:
-    result = store.get_track_record(tier=tier)
-    return TrackRecordResponse(
-        n_resolved=result["n_resolved"], by_market=[TrackRecordEntry(**row) for row in result["by_market"]]
-    )
+def get_track_record(tier: str | None = None, session_type: str | None = None) -> TrackRecordResponse:
+    result = store.get_session_track_record(session_type=session_type, tier=tier)
+    by_market = [{k: v for k, v in row.items() if k != "session_type"} for row in result["by_market"]]
+    return TrackRecordResponse(n_resolved=result["n_resolved"], by_market=[TrackRecordEntry(**row) for row in by_market])
 
 
 @router.get("/track-record/by-race", response_model=list[RaceAccuracyEntry])
-def get_race_accuracy(tier: str | None = None) -> list[RaceAccuracyEntry]:
-    return [RaceAccuracyEntry(**row) for row in store.get_race_accuracy(tier=tier)]
+def get_race_accuracy(tier: str | None = None, session_type: str | None = None) -> list[RaceAccuracyEntry]:
+    return [RaceAccuracyEntry(**{k: v for k, v in row.items() if k != "session_type"}) for row in store.get_session_accuracy(session_type=session_type, tier=tier)]
 
 
 @router.get("/live/current")
