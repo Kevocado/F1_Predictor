@@ -22,6 +22,7 @@ src/f1_predictor/evaluate/__init__.py
 src/f1_predictor/evaluate/backtest.py
 src/f1_predictor/evaluate/feature_ablation.py
 src/f1_predictor/evaluate/live_replay.py
+src/f1_predictor/evaluate/quali_feature_ablation.py
 src/f1_predictor/evaluate/test_energy_feature.py
 src/f1_predictor/evaluate/tune_hyperparams.py
 src/f1_predictor/evaluate/tune_live_hyperparams.py
@@ -33,6 +34,7 @@ src/f1_predictor/features/elo.py
 src/f1_predictor/features/energy.py
 src/f1_predictor/features/rolling_form.py
 src/f1_predictor/features/safety_car.py
+src/f1_predictor/features/session_build.py
 src/f1_predictor/features/session_state.py
 src/f1_predictor/features/team_strength.py
 src/f1_predictor/features/weather.py
@@ -44,7 +46,18 @@ src/f1_predictor/models/live_poller.py
 src/f1_predictor/models/live_win_prob.py
 src/f1_predictor/models/manifest.py
 src/f1_predictor/models/race_outcome.py
+src/f1_predictor/models/session_outcome.py
 src/f1_predictor/tracking/__init__.py
 src/f1_predictor/tracking/store.py
 tests/test_auth.py
+tests/test_backtest_session.py
+tests/test_manifest_session_models.py
+tests/test_quali_feature_ablation.py
+tests/test_race_outcome_simulate.py
 tests/test_race_prediction_caching.py
+tests/test_session_build.py
+tests/test_session_outcome.py
+tests/test_session_prediction_routes.py
+tests/test_session_predictions_store.py
+tests/test_session_reconciliation.py
+tests/test_session_state.py
