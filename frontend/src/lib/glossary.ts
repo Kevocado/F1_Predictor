@@ -60,4 +60,6 @@ export const FEATURE_LABELS: Record<string, string> = {
   temp_max_c: "Forecast max temperature",
   precipitation_mm: "Forecast precipitation",
   wind_max_kph: "Forecast wind speed",
+  sprint_finish_position: "This weekend's sprint result",
+  sprint_quali_position: "This weekend's sprint grid",
 };

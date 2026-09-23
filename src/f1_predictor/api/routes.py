@@ -441,6 +441,36 @@ def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFr
     return future_df, build_features.FEATURE_COLUMNS
 
 
+def _session_feature_frame_for_explain(season: int, round_: int, session_type: str) -> tuple[pd.DataFrame, list[str]]:
+    """The non-race counterpart to _race_feature_frame_for_explain, same
+    reasoning: built from the CURRENT production session model's training
+    frame for a completed session (what the deployed model actually
+    attributes), or the live current-state row for an upcoming one."""
+    if session_type == "race":
+        return _race_feature_frame_for_explain(season, round_)
+
+    schedule = jolpica.fetch_season_schedule(season)
+    race_rows = schedule[schedule["round"] == round_]
+    if race_rows.empty:
+        raise HTTPException(status_code=404, detail=f"No such race: {season} round {round_}")
+    race_row = race_rows.iloc[0]
+    now = pd.Timestamp.now(tz="UTC")
+    completed = _session_is_completed(season, round_, session_type, race_row, now)
+    feature_cols = session_build.SESSION_FEATURE_COLUMNS[session_type]
+
+    if completed:
+        df, _cols = _cached(
+            f"explain_session_frame_{session_type}_{season}",
+            lambda: session_build.build_session_training_frame(session_type, seasons=jolpica.default_seasons()),
+            ttl=_CACHE_TTL_SECONDS,
+        )
+        race_df = df[(df["season"] == season) & (df["round"] == round_)]
+        return race_df, feature_cols
+
+    future_df = _current_session_feature_row(season, round_, race_row, session_type)
+    return future_df, feature_cols
+
+
 @router.get("/races", response_model=list[RaceSummary])
 def list_races(season: int | None = None) -> list[RaceSummary]:
     season = season or CURRENT_SEASON
@@ -559,28 +589,45 @@ def get_qualifying_prediction(season: int, round_: int) -> SessionPredictionResp
 
 
 @router.get("/races/{season}/{round_}/explain", response_model=ExplainResponse)
-def explain_prediction(season: int, round_: int, driver_id: str) -> ExplainResponse:
-    """What's driving this driver's prediction — one explanation for
-    Win/Podium/Points-finish (they're derived from the same strength
-    score, see models/explain.py), a separate one for DNF."""
-    race_df, feature_cols = _race_feature_frame_for_explain(season, round_)
+def explain_prediction(season: int, round_: int, driver_id: str, session_type: str = "race") -> ExplainResponse:
+    """What's driving this driver's prediction — one explanation for the
+    markets derived from the same strength score (Win/Podium/Points for
+    race-type sessions, Pole/Top-3/Top-10 for qualifying-type ones — see
+    models/explain.py), a separate one for DNF where that market exists at
+    all (qualifying-type sessions have no DNF concept — dnf_contributors
+    comes back empty for those, not fabricated)."""
+    race_df, feature_cols = _session_feature_frame_for_explain(season, round_, session_type)
     driver_row = race_df[race_df["driver_id"] == driver_id]
     if driver_row.empty:
         raise HTTPException(
             status_code=404, detail=f"No feature row for driver '{driver_id}' in {season} round {round_}"
         )
 
-    candidate, ranker, dnf_clf = _load_models()
-    if candidate == "xgb_ranker":
+    if session_type == "race":
+        candidate, ranker, dnf_clf = _load_models()
+        if candidate == "xgb_ranker":
+            strength_contribs = explain_lib.explain_strength_xgb(ranker, driver_row, feature_cols)
+            strength_cols = feature_cols
+        else:
+            strength_contribs = explain_lib.explain_strength_elo(driver_row)
+            strength_cols = ["elo_pre_race", "team_strength_pre_race"]
+        dnf_top = explain_lib.top_contributors(
+            explain_lib.explain_dnf(dnf_clf, driver_row, feature_cols).iloc[0], driver_row.iloc[0], feature_cols
+        )
+    else:
+        candidate = "xgb_ranker"
+        ranker, dnf_clf = _load_session_models(session_type)
         strength_contribs = explain_lib.explain_strength_xgb(ranker, driver_row, feature_cols)
         strength_cols = feature_cols
-    else:
-        strength_contribs = explain_lib.explain_strength_elo(driver_row)
-        strength_cols = ["elo_pre_race", "team_strength_pre_race"]
-    dnf_contribs = explain_lib.explain_dnf(dnf_clf, driver_row, feature_cols)
+        spec = session_outcome.SESSION_SPECS[session_type]
+        if spec.has_dnf and dnf_clf is not None:
+            dnf_top = explain_lib.top_contributors(
+                explain_lib.explain_dnf(dnf_clf, driver_row, feature_cols).iloc[0], driver_row.iloc[0], feature_cols
+            )
+        else:
+            dnf_top = []
 
     strength_top = explain_lib.top_contributors(strength_contribs.iloc[0], driver_row.iloc[0], strength_cols)
-    dnf_top = explain_lib.top_contributors(dnf_contribs.iloc[0], driver_row.iloc[0], feature_cols)
 
     return ExplainResponse(
         season=season,

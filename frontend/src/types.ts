@@ -125,12 +125,6 @@ export interface RaceAccuracyEntry {
   points_finish_of: number;
 }
 
-export interface LiveCurrentResponse {
-  live: boolean;
-  blocked?: boolean;
-  reason?: string;
-}
-
 export interface RetrainResponse {
   status: string;
   trained_at: string;

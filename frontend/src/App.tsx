@@ -2,9 +2,8 @@ import { useState } from "react";
 import { RacesPage } from "./pages/RacesPage";
 import { ChampionshipPage } from "./pages/ChampionshipPage";
 import { TrackRecordPage } from "./pages/TrackRecordPage";
-import { LivePage } from "./pages/LivePage";
 
-type Tab = "races" | "championship" | "track-record" | "live";
+type Tab = "races" | "championship" | "track-record";
 
 function App() {
   const [tab, setTab] = useState<Tab>("races");
@@ -25,7 +24,6 @@ function App() {
           {(
             [
               ["races", "Races"],
-              ["live", "Live"],
               ["championship", "Championship"],
               ["track-record", "Track Record"],
             ] as const
@@ -49,9 +47,6 @@ function App() {
       <main>
         <div style={{ display: tab === "races" ? "block" : "none" }}>
           <RacesPage />
-        </div>
-        <div style={{ display: tab === "live" ? "block" : "none" }}>
-          <LivePage />
         </div>
         <div style={{ display: tab === "championship" ? "block" : "none" }}>
           <ChampionshipPage />

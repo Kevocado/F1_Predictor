@@ -1,7 +1,6 @@
 import type {
   ChampionshipResponse,
   ExplainResponse,
-  LiveCurrentResponse,
   RaceAccuracyEntry,
   RacePredictionResponse,
   RaceSummary,
@@ -46,8 +45,10 @@ export const api = {
       : "qualifying-prediction";
     return get<SessionPredictionResponse>(`/races/${season}/${round}/${path}`);
   },
-  explainPrediction: (season: number, round: number, driverId: string) =>
-    get<ExplainResponse>(`/races/${season}/${round}/explain?driver_id=${encodeURIComponent(driverId)}`),
+  explainPrediction: (season: number, round: number, driverId: string, sessionType: SessionType = "race") =>
+    get<ExplainResponse>(
+      `/races/${season}/${round}/explain?driver_id=${encodeURIComponent(driverId)}&session_type=${sessionType}`,
+    ),
   championship: (championship: "drivers" | "constructors", season?: number) =>
     get<ChampionshipResponse>(
       `/championship/${championship}${season ? `?season=${season}` : ""}`,
@@ -66,7 +67,6 @@ export const api = {
     const qs = params.toString();
     return get<RaceAccuracyEntry[]>(qs ? `/track-record/by-race?${qs}` : "/track-record/by-race");
   },
-  liveCurrent: () => get<LiveCurrentResponse>("/live/current"),
   retrain: () => post<RetrainResponse>("/retrain"),
 };
 

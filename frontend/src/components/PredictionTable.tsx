@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { DriverPrediction, ExplainResponse } from "../types";
+import { Fragment, useState } from "react";
+import type { SessionDriverPrediction, ExplainResponse, SessionType } from "../types";
 import { driverName, teamColor } from "../lib/teamColors";
 import { ProbabilityHeatCell } from "./ProbabilityHeatCell";
 import { ResultDelta } from "./ResultDelta";
@@ -8,32 +8,63 @@ import { InfoTooltip } from "./InfoTooltip";
 import { ExplainRibbon } from "./ExplainRibbon";
 import { api } from "../api/client";
 
-function columnMax(predictions: DriverPrediction[], key: keyof DriverPrediction): number {
-  const max = Math.max(...predictions.map((p) => p[key] as number));
+const IS_QUALI_TYPE: Record<SessionType, boolean> = {
+  sprint_qualifying: true,
+  qualifying: true,
+  sprint: false,
+  race: false,
+};
+
+const STRENGTH_LABEL: Record<SessionType, string> = {
+  sprint_qualifying: "Pole / Top 3 / Top 10",
+  qualifying: "Pole / Top 3 / Top 10",
+  sprint: "Win / Podium / Points",
+  race: "Win / Podium / Points",
+};
+
+function columnMax(predictions: SessionDriverPrediction[], key: keyof SessionDriverPrediction): number {
+  const values = predictions.map((p) => (p[key] as number) ?? 0);
+  const max = Math.max(...values);
   return max > 0 ? max : 1;
 }
 
 type Section = "strength" | "dnf";
 
 interface Props {
-  predictions: DriverPrediction[];
+  predictions: SessionDriverPrediction[];
   season: number;
   round: number;
+  sessionType: SessionType;
 }
 
-export function DriverPredictionTable({ predictions, season, round }: Props) {
-  const sorted = [...predictions].sort((a, b) => b.p_win - a.p_win);
+export function PredictionTable({ predictions, season, round, sessionType }: Props) {
+  const isQuali = IS_QUALI_TYPE[sessionType];
+  const rankKey = isQuali ? "p_pole" : "p_win";
+  const col1Key: keyof SessionDriverPrediction = isQuali ? "p_pole" : "p_win";
+  const col2Key: keyof SessionDriverPrediction = isQuali ? "p_top_3" : "p_podium";
+  const col3Key: keyof SessionDriverPrediction = isQuali ? "p_top_10" : "p_points_finish";
+  const col1Label = isQuali ? "Pole" : "Win";
+  const col2Label = isQuali ? "Top 3" : "Podium";
+  const col3Label = isQuali ? "Top 10" : "Points";
+
+  const sorted = [...predictions].sort((a, b) => ((b[rankKey] as number) ?? 0) - ((a[rankKey] as number) ?? 0));
   const hasActuals = sorted.some((p) => p.actual_position != null || p.actual_dnf);
 
-  const maxWin = columnMax(sorted, "p_win");
-  const maxPodium = columnMax(sorted, "p_podium");
-  const maxPoints = columnMax(sorted, "p_points_finish");
-  const maxDnf = columnMax(sorted, "p_dnf");
+  const max1 = columnMax(sorted, col1Key);
+  const max2 = columnMax(sorted, col2Key);
+  const max3 = columnMax(sorted, col3Key);
+  const maxDnf = !isQuali ? columnMax(sorted, "p_dnf") : 1;
 
   const [expanded, setExpanded] = useState<{ driverId: string; section: Section } | null>(null);
   const [explainCache, setExplainCache] = useState<Record<string, ExplainResponse>>({});
   const [explainError, setExplainError] = useState<string | null>(null);
   const [loadingDriver, setLoadingDriver] = useState<string | null>(null);
+
+  // Session-type switches reuse driver_id keys across different underlying
+  // predictions -- a stale cache entry from the previously-selected session
+  // would silently show the wrong explanation, so each session type gets
+  // its own cache rather than sharing one across switches.
+  const cacheKey = (driverId: string) => `${sessionType}:${driverId}`;
 
   const handleCellClick = (driverId: string, section: Section) => {
     if (expanded?.driverId === driverId && expanded.section === section) {
@@ -42,17 +73,18 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
     }
     setExpanded({ driverId, section });
     setExplainError(null);
-    if (!explainCache[driverId]) {
+    const key = cacheKey(driverId);
+    if (!explainCache[key]) {
       setLoadingDriver(driverId);
       api
-        .explainPrediction(season, round, driverId)
-        .then((res) => setExplainCache((prev) => ({ ...prev, [driverId]: res })))
+        .explainPrediction(season, round, driverId, sessionType)
+        .then((res) => setExplainCache((prev) => ({ ...prev, [key]: res })))
         .catch((e) => setExplainError(e.message))
         .finally(() => setLoadingDriver(null));
     }
   };
 
-  const colCount = 6 + (hasActuals ? 1 : 0);
+  const colCount = 5 + (!isQuali ? 1 : 0) + (hasActuals ? 1 : 0);
 
   return (
     <div>
@@ -67,16 +99,16 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
             <tr className="border-b border-f1-border text-left text-[11px] uppercase tracking-wide text-f1-text-faint">
               <th className="py-2 pr-3 font-medium">#</th>
               <th className="py-2 pr-3 font-medium">Driver</th>
-              <th className="py-2 pr-3 font-medium">Win</th>
-              <th className="py-2 pr-3 font-medium">Podium</th>
-              <th className="py-2 pr-3 font-medium">Points</th>
-              <th className="py-2 pr-3 font-medium">DNF</th>
+              <th className="py-2 pr-3 font-medium">{col1Label}</th>
+              <th className="py-2 pr-3 font-medium">{col2Label}</th>
+              <th className="py-2 pr-3 font-medium">{col3Label}</th>
+              {!isQuali && <th className="py-2 pr-3 font-medium">DNF</th>}
               {hasActuals && (
                 <th className="py-2 pr-3 text-right font-medium">
                   <span className="inline-flex items-center gap-1">
                     Predicted vs. actual
                     <InfoTooltip
-                      text="Predicted rank (by win chance) compared to where the driver actually finished. ▲ green = beat the prediction, ▼ red = underperformed it."
+                      text="Predicted rank (by top market) compared to where the driver actually finished. ▲ green = beat the prediction, ▼ red = underperformed it."
                       align="right"
                     />
                   </span>
@@ -87,9 +119,9 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
           <tbody>
             {sorted.map((p, i) => {
               const isExpanded = expanded?.driverId === p.driver_id;
-              const explain = explainCache[p.driver_id];
+              const explain = explainCache[cacheKey(p.driver_id)];
               return (
-                <>
+                <Fragment key={p.driver_id}>
                   <tr
                     key={p.driver_id}
                     className="border-b border-f1-border/60 last:border-0 hover:bg-f1-800/40"
@@ -105,7 +137,12 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                         className="block w-full cursor-pointer rounded-md ring-f1-red/50 transition hover:ring-2"
                         onClick={() => handleCellClick(p.driver_id, "strength")}
                       >
-                        <ProbabilityHeatCell value={p.p_win} intensity={p.p_win / maxWin} color="var(--color-f1-red)" digits={1} />
+                        <ProbabilityHeatCell
+                          value={(p[col1Key] as number) ?? 0}
+                          intensity={((p[col1Key] as number) ?? 0) / max1}
+                          color="var(--color-f1-red)"
+                          digits={1}
+                        />
                       </button>
                     </td>
                     <td className="py-1.5 pr-2">
@@ -113,7 +150,11 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                         className="block w-full cursor-pointer rounded-md ring-podium/50 transition hover:ring-2"
                         onClick={() => handleCellClick(p.driver_id, "strength")}
                       >
-                        <ProbabilityHeatCell value={p.p_podium} intensity={p.p_podium / maxPodium} color="var(--color-podium)" />
+                        <ProbabilityHeatCell
+                          value={(p[col2Key] as number) ?? 0}
+                          intensity={((p[col2Key] as number) ?? 0) / max2}
+                          color="var(--color-podium)"
+                        />
                       </button>
                     </td>
                     <td className="py-1.5 pr-2">
@@ -122,20 +163,22 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                         onClick={() => handleCellClick(p.driver_id, "strength")}
                       >
                         <ProbabilityHeatCell
-                          value={p.p_points_finish}
-                          intensity={p.p_points_finish / maxPoints}
+                          value={(p[col3Key] as number) ?? 0}
+                          intensity={((p[col3Key] as number) ?? 0) / max3}
                           color="var(--color-win)"
                         />
                       </button>
                     </td>
-                    <td className="py-1.5 pr-2">
-                      <button
-                        className="block w-full cursor-pointer rounded-md ring-dnf/50 transition hover:ring-2"
-                        onClick={() => handleCellClick(p.driver_id, "dnf")}
-                      >
-                        <ProbabilityHeatCell value={p.p_dnf} intensity={p.p_dnf / maxDnf} color="var(--color-dnf)" />
-                      </button>
-                    </td>
+                    {!isQuali && (
+                      <td className="py-1.5 pr-2">
+                        <button
+                          className="block w-full cursor-pointer rounded-md ring-dnf/50 transition hover:ring-2"
+                          onClick={() => handleCellClick(p.driver_id, "dnf")}
+                        >
+                          <ProbabilityHeatCell value={p.p_dnf ?? 0} intensity={(p.p_dnf ?? 0) / maxDnf} color="var(--color-dnf)" />
+                        </button>
+                      </td>
+                    )}
                     {hasActuals && (
                       <td className="py-2 pr-3">
                         <ResultDelta predictedRank={i + 1} actualPosition={p.actual_position} actualDnf={p.actual_dnf} />
@@ -147,8 +190,8 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                       <td colSpan={colCount} className="p-0">
                         {expanded.section === "strength" ? (
                           <ExplainRibbon
-                            title={`What's driving ${driverName(p.driver_id)}'s Win / Podium / Points prediction`}
-                            note="Win, Podium, and Points-finish come from the same underlying race-strength prediction, so they share one explanation."
+                            title={`What's driving ${driverName(p.driver_id)}'s ${STRENGTH_LABEL[sessionType]} prediction`}
+                            note={`${STRENGTH_LABEL[sessionType]} come from the same underlying strength prediction, so they share one explanation.`}
                             contributors={explain?.strength_contributors ?? null}
                             loading={loadingDriver === p.driver_id}
                             error={explainError}
@@ -156,7 +199,7 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                         ) : (
                           <ExplainRibbon
                             title={`What's driving ${driverName(p.driver_id)}'s DNF risk`}
-                            note="A separate model from Win/Podium/Points, trained on reliability history."
+                            note={`A separate model from ${STRENGTH_LABEL[sessionType]}, trained on reliability history.`}
                             contributors={explain?.dnf_contributors ?? null}
                             loading={loadingDriver === p.driver_id}
                             error={explainError}
@@ -165,7 +208,7 @@ export function DriverPredictionTable({ predictions, season, round }: Props) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
