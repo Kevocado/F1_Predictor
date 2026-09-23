@@ -9,7 +9,12 @@ build
 dist
 
 .env
-data/tracking.db
+# tracking.db IS shipped now (force-added past .gitignore, same as the
+# model files) -- Azure Container Apps has no persistent volume, so
+# without it in the build context Track Record would reset on every
+# deploy. Confirmed the hard way: a stale exclusion here left over from
+# before tracking.db was committed broke the very first deploy that tried
+# to ship it ("COPY data/tracking.db: not found").
 
 # data/cache is otherwise ephemeral generated state, EXCEPT the immutable
 # past-season jolpica cache (2019-2025 results never change once a season
