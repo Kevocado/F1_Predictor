@@ -54,9 +54,22 @@ jobs:
         run: python -m f1_predictor.public_snapshot
 
       - name: Commit and push if changed
+        # Confirmed directly (not theoretical): an overlapping run once
+        # produced a real git merge conflict in public_snapshot.json that
+        # got committed with literal <<<<<<< markers still in it, breaking
+        # the site's JSON poll until manually fixed. Two defenses against a
+        # repeat: (1) validate the file actually parses as JSON before
+        # committing -- fail loud here rather than ship broken content;
+        # (2) pull --rebase immediately before committing, and retry once
+        # (pull --rebase, recommit) if the push is rejected as non-fast-
+        # forward, to absorb a genuinely concurrent run instead of racing it.
         run: |
+          set -e
+          python -c "import json; json.load(open('data/public_snapshot.json'))"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add data/public_snapshot.json
           git add -f data/tracking.db
           if git diff --cached --quiet; then
@@ -64,4 +77,13 @@ jobs:
             exit 0
           fi
           git commit -m "Refresh public snapshot + track record [automated]"
-          git push
+
+          for attempt in 1 2; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) -- pulling and retrying..."
+            git pull --rebase
+          done
+          echo "Push failed after retry." >&2
+          exit 1
