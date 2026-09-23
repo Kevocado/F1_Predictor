@@ -165,7 +165,7 @@ def _parse_result_row(res: dict, season: int, round_: int) -> dict:
         "laps": int(res["laps"]),
         "status": res["status"],
         "dnf": is_dnf(res["status"]),
-        "fastest_lap_rank": int(res["FastestLap"]["rank"]) if "FastestLap" in res else None,
+        "fastest_lap_rank": int(res["FastestLap"]["rank"]) if "rank" in res.get("FastestLap", {}) else None,
     }
 
 
