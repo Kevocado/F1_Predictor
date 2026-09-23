@@ -251,9 +251,14 @@ def _session_is_completed(season: int, round_: int, session_type: str, race_row:
         session_dt = race_row.get("sprint_datetime" if session_type == "sprint" else "sprint_quali_datetime")
         if pd.isna(session_dt) or session_dt > now:
             return False
-        return not jolpica.load_season_sprints(season)[
-            jolpica.load_season_sprints(season)["round"] == round_
-        ].empty
+        # Check this round's sprint results directly rather than filtering
+        # load_season_sprints(season) — before that season's first
+        # completed sprint weekend, load_season_sprints returns a frame
+        # with NO columns at all (not just no rows), so indexing ["round"]
+        # on it raises KeyError. fetch_sprint_results(season, round_) also
+        # correctly picks up a same-weekend sprint that already happened
+        # even before load_season_sprints' season-wide "completed" cutoff.
+        return not jolpica.fetch_sprint_results(season, round_).empty
     # "qualifying"
     quali_dt = race_row.get("qualifying_datetime")
     if pd.isna(quali_dt) or quali_dt > now:
@@ -282,6 +287,12 @@ def _current_session_feature_row(season: int, round_: int, race_row: pd.Series, 
             m = sprint_this_round.set_index("driver_id")["position"]
             future_df["sprint_finish_position"] = future_df["driver_id"].map(m)
     elif session_type == "sprint":
+        # Known limitation: before the sprint has actually run this
+        # weekend, sprint_this_round is empty, so sprint_quali_position
+        # stays NaN even when sprint qualifying already happened earlier
+        # in the weekend — there's no live intra-weekend data source
+        # (e.g. OpenF1/FastF1) wired up yet to fill it in. Out of scope
+        # for this fix wave; see I2 in the final-review fix-wave report.
         future_df["sprint_quali_position"] = float("nan")
         if not sprint_this_round.empty:
             m = sprint_this_round.set_index("driver_id")["grid"]
@@ -322,9 +333,13 @@ def _completed_session_prediction(season: int, round_: int, session_type: str) -
         pivot = df.pivot_table(index="driver_id", columns="market", values="predicted_prob", aggfunc="first").reset_index()
         market_spec = store.SESSION_MARKET_SPEC[session_type]
         pivot = pivot.rename(columns={market: prob_col for market, prob_col in market_spec})
-        extra = df.drop_duplicates("driver_id")[["driver_id", "constructor_id", "actual_position", "actual_dnf"]]
+        extra_cols = ["driver_id", "constructor_id", "actual_position", "actual_dnf"]
+        if "expected_position" in df.columns:
+            extra_cols.append("expected_position")
+        extra = df.drop_duplicates("driver_id")[extra_cols]
         pivot = pivot.merge(extra, on="driver_id", how="left")
-        pivot["expected_position"] = float("nan")
+        if "expected_position" not in pivot.columns:
+            pivot["expected_position"] = float("nan")
         return pivot, spec.feature_cutoff_tier, "tracked"
 
     result = backtest_lib.backtest_session(season, round_, session_type=session_type)
