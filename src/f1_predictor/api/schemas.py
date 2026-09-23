@@ -37,6 +37,33 @@ class RacePredictionResponse(BaseModel):
     predictions: list[DriverPrediction]
 
 
+class SessionDriverPrediction(BaseModel):
+    driver_id: str
+    constructor_id: str | None = None
+    # Qualifying-type markets (sprint_qualifying, qualifying) — omitted for race/sprint.
+    p_pole: float | None = None
+    p_top_3: float | None = None
+    p_top_10: float | None = None
+    # Race-type markets (sprint, race) — omitted for sprint_qualifying/qualifying.
+    p_win: float | None = None
+    p_podium: float | None = None
+    p_points_finish: float | None = None
+    p_dnf: float | None = None
+    expected_position: float
+    actual_position: int | None = None
+    actual_dnf: bool | None = None
+
+
+class SessionPredictionResponse(BaseModel):
+    season: int
+    round: int
+    race_name: str
+    session_type: str  # "sprint_qualifying" | "qualifying" | "sprint" | "race"
+    tier: str
+    source: str  # "live" | "tracked" | "backtest"
+    predictions: list[SessionDriverPrediction]
+
+
 class ChampionshipEntry(BaseModel):
     entity_id: str
     win_prob: float
