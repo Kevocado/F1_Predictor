@@ -52,9 +52,20 @@ export const api = {
     get<ChampionshipResponse>(
       `/championship/${championship}${season ? `?season=${season}` : ""}`,
     ),
-  trackRecord: (tier?: string) => get<TrackRecordResponse>(tier ? `/track-record?tier=${tier}` : "/track-record"),
-  raceAccuracy: (tier?: string) =>
-    get<RaceAccuracyEntry[]>(tier ? `/track-record/by-race?tier=${tier}` : "/track-record/by-race"),
+  trackRecord: (tier?: string, sessionType?: string) => {
+    const params = new URLSearchParams();
+    if (tier) params.set("tier", tier);
+    if (sessionType) params.set("session_type", sessionType);
+    const qs = params.toString();
+    return get<TrackRecordResponse>(qs ? `/track-record?${qs}` : "/track-record");
+  },
+  raceAccuracy: (tier?: string, sessionType?: string) => {
+    const params = new URLSearchParams();
+    if (tier) params.set("tier", tier);
+    if (sessionType) params.set("session_type", sessionType);
+    const qs = params.toString();
+    return get<RaceAccuracyEntry[]>(qs ? `/track-record/by-race?${qs}` : "/track-record/by-race");
+  },
   liveCurrent: () => get<LiveCurrentResponse>("/live/current"),
   retrain: () => post<RetrainResponse>("/retrain"),
 };

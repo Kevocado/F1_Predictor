@@ -12,9 +12,12 @@ export function TrackRecordPage() {
   const [accuracyError, setAccuracyError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.trackRecord().then(setData).catch((e) => setError(e.message));
+    // session_type="race" preserves current (pre-session-predictors) behavior:
+    // without it, race and the new qualifying/sprint/sprint-qualifying
+    // tracked predictions would mix together in this one view.
+    api.trackRecord(undefined, "race").then(setData).catch((e) => setError(e.message));
     api
-      .raceAccuracy("post_qualifying")
+      .raceAccuracy("post_qualifying", "race")
       .then(setAccuracy)
       .catch((e) => setAccuracyError(e.message));
   }, []);
