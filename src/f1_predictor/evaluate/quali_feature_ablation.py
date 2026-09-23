@@ -43,8 +43,9 @@ _MARKETS = [("win", "p_win"), ("podium", "p_podium"), ("points_finish", "p_point
 
 
 def _brier_by_market(sim: pd.DataFrame, actual: pd.DataFrame) -> dict[str, float]:
-    """actual must have columns driver_id/season/round/position/dnf,
-    already restricted to the rows being scored."""
+    """actual must have columns driver_id/position/dnf, already restricted
+    to the rows being scored (a single race/tier group, so driver_id is
+    unique)."""
     merged = sim.merge(actual, on="driver_id", how="inner")
     scores = {}
     for market, prob_col in _MARKETS:
@@ -98,13 +99,16 @@ def run_ablation(seasons: list[int] | None = None) -> dict:
     )
     feature_cols_with = feature_cols + ["predicted_quali_position"]
 
-    rounds = sorted(df["round"].unique())
-    split_idx = max(1, len(rounds) * 3 // 4)
-    train_rounds = set(rounds[:split_idx])
-    test_rounds = set(rounds[split_idx:]) or {rounds[-1]}
+    race_keys = sorted(df[["season", "round"]].drop_duplicates().itertuples(index=False, name=None))
+    if len(race_keys) < 2:
+        nan_scores = {market: float("nan") for market, _ in _MARKETS}
+        return {"with_feature": nan_scores, "without_feature": nan_scores, "recommendation": "no_change"}
+    split_idx = max(1, len(race_keys) * 3 // 4)
+    train_keys = set(race_keys[:split_idx])
+    test_keys = set(race_keys[split_idx:]) or {race_keys[-1]}
 
-    scores_without = _score_variant(df, feature_cols, train_rounds, test_rounds)
-    scores_with = _score_variant(df_with_feature, feature_cols_with, train_rounds, test_rounds)
+    scores_without = _score_variant(df, feature_cols, train_keys, test_keys)
+    scores_with = _score_variant(df_with_feature, feature_cols_with, train_keys, test_keys)
 
     total_without = sum(scores_without.values())
     total_with = sum(scores_with.values())
@@ -113,24 +117,35 @@ def run_ablation(seasons: list[int] | None = None) -> dict:
     return {"with_feature": scores_with, "without_feature": scores_without, "recommendation": recommendation}
 
 
-def _score_variant(df: pd.DataFrame, feature_cols: list[str], train_rounds: set, test_rounds: set) -> dict[str, float]:
+def _score_variant(df: pd.DataFrame, feature_cols: list[str], train_keys: set, test_keys: set) -> dict[str, float]:
     post_quali = df[df["tier"] == session_state.TIER_POST_QUALIFYING]
-    train_df = post_quali[post_quali["round"].isin(train_rounds)]
+    train_df = post_quali[[(s, r) in train_keys for s, r in zip(post_quali["season"], post_quali["round"])]]
+    if train_df.empty:
+        return {market: float("nan") for market, _ in _MARKETS}
 
     ranker = race_outcome.train_ranker(train_df, feature_cols)
     dnf_clf = dnf_model.train_dnf_model(train_df, feature_cols)
 
-    pre_quali_test = df[(df["tier"].isin(_PRE_QUALI_TIERS)) & (df["round"].isin(test_rounds))]
+    pre_quali = df[df["tier"].isin(_PRE_QUALI_TIERS)]
+    pre_quali_test = pre_quali[[(s, r) in test_keys for s, r in zip(pre_quali["season"], pre_quali["round"])]]
     if pre_quali_test.empty:
         return {market: float("nan") for market, _ in _MARKETS}
 
-    scores = race_outcome.xgb_scores_for_race(ranker, pre_quali_test, feature_cols)
-    theta = race_outcome.theta_from_xgb_scores(scores)
-    dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, pre_quali_test, feature_cols)
-    sim = race_outcome.simulate_race(theta, dnf_prob=dnf_prob, n_trials=5000, seed=0)
+    per_market_scores: dict[str, list[float]] = {market: [] for market, _ in _MARKETS}
+    for (_season, _round, _tier), race_test in pre_quali_test.groupby(["season", "round", "tier"]):
+        scores = race_outcome.xgb_scores_for_race(ranker, race_test, feature_cols)
+        theta = race_outcome.theta_from_xgb_scores(scores)
+        dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, race_test, feature_cols)
+        sim = race_outcome.simulate_race(theta, dnf_prob=dnf_prob, n_trials=5000, seed=0)
+        actual = race_test[["driver_id", "position", "dnf"]]
+        race_scores = _brier_by_market(sim, actual)
+        for market, _prob_col in _MARKETS:
+            per_market_scores[market].append(race_scores[market])
 
-    actual = pre_quali_test.drop_duplicates("driver_id")[["driver_id", "position", "dnf"]]
-    return _brier_by_market(sim, actual)
+    return {
+        market: (float(np.mean(vals)) if vals else float("nan"))
+        for market, vals in per_market_scores.items()
+    }
 
 
 def main() -> None:
