@@ -124,6 +124,22 @@ def build_session_training_frame(
                 columns={"position": "sprint_finish_position"}
             )
             df = df.merge(sprint_feat, on=["season", "round", "driver_id"], how="left")
+            # In 2021-2023 some sprint weekends ran the sprint race AFTER
+            # qualifying (format varied by season) — for those rows,
+            # sprint_finish_position is data from an event that happened
+            # chronologically after what's being predicted, a genuine
+            # leak. Mask it to NaN wherever the sprint did not strictly
+            # precede qualifying, using each race's actual scheduled
+            # datetimes rather than a hardcoded season cutoff.
+            session_dt = schedule_df[["season", "round", "sprint_datetime", "qualifying_datetime"]].drop_duplicates(
+                subset=["season", "round"]
+            )
+            df = df.merge(session_dt, on=["season", "round"], how="left")
+            sprint_before_quali = df["sprint_datetime"].notna() & df["qualifying_datetime"].notna() & (
+                df["sprint_datetime"] < df["qualifying_datetime"]
+            )
+            df.loc[~sprint_before_quali, "sprint_finish_position"] = float("nan")
+            df = df.drop(columns=["sprint_datetime", "qualifying_datetime"])
     elif session_type == "sprint":
         df["sprint_quali_position"] = df["grid"]
 
