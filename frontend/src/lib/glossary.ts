@@ -2,6 +2,8 @@ export const TIER_LABELS: Record<string, string> = {
   pre_weekend: "Pre-weekend",
   post_practice: "Post-practice",
   post_qualifying: "Post-qualifying",
+  post_sprint_qualifying: "Post Sprint Quali",
+  post_sprint: "Post Sprint",
 };
 
 export const TIER_DESCRIPTIONS: Record<string, string> = {
@@ -11,6 +13,10 @@ export const TIER_DESCRIPTIONS: Record<string, string> = {
     "After free practice — sharpened with practice pace once that data is available.",
   post_qualifying:
     "After qualifying — the fullest pre-race information state, including grid position, the single strongest predictor of a race result.",
+  post_sprint_qualifying:
+    "Computed after sprint qualifying has set the sprint grid.",
+  post_sprint:
+    "Computed after the sprint race, using its result as a real input.",
 };
 
 export const SOURCE_DESCRIPTIONS: Record<string, string> = {

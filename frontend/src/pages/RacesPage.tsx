@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { RaceSummary } from "../types";
 import { RaceRow } from "../components/RaceRow";
 import { RacePredictionPanel } from "../components/RacePredictionPanel";
+import { SessionPredictionPanel } from "../components/SessionPredictionPanel";
 
 export function RacesPage() {
   const [races, setRaces] = useState<RaceSummary[] | null>(null);
@@ -45,9 +46,23 @@ export function RacesPage() {
           />
         ))}
       </div>
-      <div>
+      <div className="flex flex-col gap-4">
         {selected ? (
-          <RacePredictionPanel season={selected.season} round={selected.round} />
+          <>
+            {selected.is_sprint_weekend && (
+              <SessionPredictionPanel
+                season={selected.season}
+                round={selected.round}
+                sessionType="sprint_qualifying"
+                title="Sprint Qualifying"
+              />
+            )}
+            {selected.is_sprint_weekend && (
+              <SessionPredictionPanel season={selected.season} round={selected.round} sessionType="sprint" title="Sprint" />
+            )}
+            <SessionPredictionPanel season={selected.season} round={selected.round} sessionType="qualifying" title="Qualifying" />
+            <RacePredictionPanel season={selected.season} round={selected.round} />
+          </>
         ) : (
           <div className="text-sm text-f1-text-faint">Select a race.</div>
         )}
