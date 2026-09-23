@@ -50,6 +50,33 @@ export interface RacePredictionResponse {
   predictions: DriverPrediction[];
 }
 
+export interface SessionDriverPrediction {
+  driver_id: string;
+  constructor_id: string | null;
+  p_pole: number | null;
+  p_top_3: number | null;
+  p_top_10: number | null;
+  p_win: number | null;
+  p_podium: number | null;
+  p_points_finish: number | null;
+  p_dnf: number | null;
+  expected_position: number;
+  actual_position: number | null;
+  actual_dnf: boolean | null;
+}
+
+export type SessionType = "sprint_qualifying" | "qualifying" | "sprint" | "race";
+
+export interface SessionPredictionResponse {
+  season: number;
+  round: number;
+  race_name: string;
+  session_type: SessionType;
+  tier: string;
+  source: string;
+  predictions: SessionDriverPrediction[];
+}
+
 export interface ChampionshipEntry {
   entity_id: string;
   win_prob: number;

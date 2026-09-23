@@ -6,6 +6,8 @@ import type {
   RacePredictionResponse,
   RaceSummary,
   RetrainResponse,
+  SessionPredictionResponse,
+  SessionType,
   TrackRecordResponse,
 } from "../types";
 
@@ -38,6 +40,12 @@ export const api = {
   races: (season?: number) => get<RaceSummary[]>(season ? `/races?season=${season}` : "/races"),
   racePrediction: (season: number, round: number) =>
     get<RacePredictionResponse>(`/races/${season}/${round}/prediction`),
+  sessionPrediction: (sessionType: Exclude<SessionType, "race">, season: number, round: number) => {
+    const path = sessionType === "sprint_qualifying" ? "sprint-qualifying-prediction"
+      : sessionType === "sprint" ? "sprint-prediction"
+      : "qualifying-prediction";
+    return get<SessionPredictionResponse>(`/races/${season}/${round}/${path}`);
+  },
   explainPrediction: (season: number, round: number, driverId: string) =>
     get<ExplainResponse>(`/races/${season}/${round}/explain?driver_id=${encodeURIComponent(driverId)}`),
   championship: (championship: "drivers" | "constructors", season?: number) =>
