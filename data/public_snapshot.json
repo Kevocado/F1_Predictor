@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "generated_at": "2026-09-23T12:05:48.542042+00:00",
-=======
   "generated_at": "2026-09-23T13:42:55.952737+00:00",
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
   "season": 2026,
   "current_round": 15,
   "races": [
@@ -3775,68 +3771,28 @@
         {
           "driver_id": "antonelli",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.406,
-          "p_podium": 0.8753,
-          "p_points_finish": 0.9409,
-          "p_dnf": 0.0591,
-          "expected_position": 2.9765,
-          "expected_points": 18.9032,
-=======
           "p_win": 0.482,
           "p_podium": 0.895,
           "p_points_finish": 0.9439,
           "p_dnf": 0.0561,
           "expected_position": 2.7745,
           "expected_points": 19.6884,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 1,
           "actual_dnf": false
         },
         {
           "driver_id": "norris",
           "constructor_id": "mclaren",
-<<<<<<< HEAD
-          "p_win": 0.3844,
-          "p_podium": 0.8608,
-          "p_points_finish": 0.9405,
-          "p_dnf": 0.0595,
-          "expected_position": 3.0532,
-          "expected_points": 18.6166,
-=======
           "p_win": 0.3122,
           "p_podium": 0.838,
           "p_points_finish": 0.9431,
           "p_dnf": 0.0569,
           "expected_position": 3.1638,
           "expected_points": 17.9015,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 3,
           "actual_dnf": false
         },
         {
-<<<<<<< HEAD
-          "driver_id": "leclerc",
-          "constructor_id": "ferrari",
-          "p_win": 0.0608,
-          "p_podium": 0.3362,
-          "p_points_finish": 0.9342,
-          "p_dnf": 0.0561,
-          "expected_position": 5.3851,
-          "expected_points": 11.2283,
-          "actual_position": 4,
-          "actual_dnf": false
-        },
-        {
-          "driver_id": "max_verstappen",
-          "constructor_id": "red_bull",
-          "p_win": 0.0421,
-          "p_podium": 0.2509,
-          "p_points_finish": 0.9215,
-          "p_dnf": 0.0543,
-          "expected_position": 5.9937,
-          "expected_points": 9.8278,
-=======
           "driver_id": "max_verstappen",
           "constructor_id": "red_bull",
           "p_win": 0.0442,
@@ -3845,7 +3801,6 @@
           "p_dnf": 0.0513,
           "expected_position": 5.9567,
           "expected_points": 9.8679,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 2,
           "actual_dnf": false
         },
@@ -3864,47 +3819,16 @@
         {
           "driver_id": "russell",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.0214,
-          "p_podium": 0.1444,
-          "p_points_finish": 0.8395,
-          "p_dnf": 0.0739,
-          "expected_position": 7.4544,
-          "expected_points": 7.3524,
-=======
           "p_win": 0.0361,
           "p_podium": 0.232,
           "p_points_finish": 0.8878,
           "p_dnf": 0.0816,
           "expected_position": 6.5538,
           "expected_points": 9.2258,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 5,
           "actual_dnf": false
         },
         {
-<<<<<<< HEAD
-          "driver_id": "colapinto",
-          "constructor_id": "alpine",
-          "p_win": 0.0155,
-          "p_podium": 0.0831,
-          "p_points_finish": 0.6911,
-          "p_dnf": 0.0616,
-          "expected_position": 8.9492,
-          "expected_points": 5.0257,
-          "actual_position": 7,
-          "actual_dnf": false
-        },
-        {
-          "driver_id": "arvid_lindblad",
-          "constructor_id": "rb",
-          "p_win": 0.0138,
-          "p_podium": 0.0818,
-          "p_points_finish": 0.697,
-          "p_dnf": 0.0605,
-          "expected_position": 8.9107,
-          "expected_points": 5.0265,
-=======
           "driver_id": "arvid_lindblad",
           "constructor_id": "rb",
           "p_win": 0.0147,
@@ -3913,33 +3837,10 @@
           "p_dnf": 0.0658,
           "expected_position": 8.9494,
           "expected_points": 5.0473,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 9,
           "actual_dnf": false
         },
         {
-<<<<<<< HEAD
-          "driver_id": "piastri",
-          "constructor_id": "mclaren",
-          "p_win": 0.0101,
-          "p_podium": 0.0605,
-          "p_points_finish": 0.5527,
-          "p_dnf": 0.1798,
-          "expected_position": 10.8548,
-          "expected_points": 3.836,
-          "actual_position": 8,
-          "actual_dnf": false
-        },
-        {
-          "driver_id": "hamilton",
-          "constructor_id": "ferrari",
-          "p_win": 0.0098,
-          "p_podium": 0.0595,
-          "p_points_finish": 0.5118,
-          "p_dnf": 0.1798,
-          "expected_position": 11.1889,
-          "expected_points": 3.4671,
-=======
           "driver_id": "hamilton",
           "constructor_id": "ferrari",
           "p_win": 0.0121,
@@ -3948,28 +3849,18 @@
           "p_dnf": 0.1799,
           "expected_position": 10.2045,
           "expected_points": 4.6348,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 22,
           "actual_dnf": true
         },
         {
           "driver_id": "hulkenberg",
           "constructor_id": "audi",
-<<<<<<< HEAD
-          "p_win": 0.0065,
-          "p_podium": 0.0434,
-          "p_points_finish": 0.4683,
-          "p_dnf": 0.0587,
-          "expected_position": 10.8846,
-          "expected_points": 2.9729,
-=======
           "p_win": 0.0115,
           "p_podium": 0.0647,
           "p_points_finish": 0.5812,
           "p_dnf": 0.0617,
           "expected_position": 9.9045,
           "expected_points": 3.9716,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 10,
           "actual_dnf": false
         },
@@ -4012,80 +3903,28 @@
         {
           "driver_id": "ocon",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0059,
-          "p_podium": 0.0334,
-          "p_points_finish": 0.3725,
-          "p_dnf": 0.0774,
-          "expected_position": 11.9758,
-          "expected_points": 2.2771,
-=======
           "p_win": 0.0051,
           "p_podium": 0.0346,
           "p_points_finish": 0.3849,
           "p_dnf": 0.075,
           "expected_position": 11.8429,
           "expected_points": 2.347,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 11,
           "actual_dnf": false
         },
         {
           "driver_id": "lawson",
           "constructor_id": "red_bull",
-<<<<<<< HEAD
-          "p_win": 0.0055,
-          "p_podium": 0.0402,
-          "p_points_finish": 0.4427,
-          "p_dnf": 0.1233,
-          "expected_position": 11.565,
-          "expected_points": 2.7341,
-=======
           "p_win": 0.0049,
           "p_podium": 0.0407,
           "p_points_finish": 0.4522,
           "p_dnf": 0.1299,
           "expected_position": 11.4969,
           "expected_points": 2.8343,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 6,
           "actual_dnf": false
         },
         {
-<<<<<<< HEAD
-          "driver_id": "gasly",
-          "constructor_id": "alpine",
-          "p_win": 0.0035,
-          "p_podium": 0.0288,
-          "p_points_finish": 0.3503,
-          "p_dnf": 0.2077,
-          "expected_position": 12.8965,
-          "expected_points": 2.1126,
-          "actual_position": 12,
-          "actual_dnf": false
-        },
-        {
-          "driver_id": "tsunoda",
-          "constructor_id": "rb",
-          "p_win": 0.0034,
-          "p_podium": 0.0227,
-          "p_points_finish": 0.2749,
-          "p_dnf": 0.1946,
-          "expected_position": 13.6113,
-          "expected_points": 1.6335,
-          "actual_position": 14,
-          "actual_dnf": false
-        },
-        {
-          "driver_id": "albon",
-          "constructor_id": "williams",
-          "p_win": 0.0023,
-          "p_podium": 0.0145,
-          "p_points_finish": 0.2048,
-          "p_dnf": 0.0957,
-          "expected_position": 14.1622,
-          "expected_points": 1.1657,
-=======
           "driver_id": "albon",
           "constructor_id": "williams",
           "p_win": 0.003,
@@ -4094,7 +3933,6 @@
           "p_dnf": 0.091,
           "expected_position": 14.2071,
           "expected_points": 1.1569,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 15,
           "actual_dnf": false
         },
@@ -4113,69 +3951,28 @@
         {
           "driver_id": "bortoleto",
           "constructor_id": "audi",
-<<<<<<< HEAD
-          "p_win": 0.0022,
-          "p_podium": 0.0125,
-          "p_points_finish": 0.1708,
-          "p_dnf": 0.2886,
-          "expected_position": 15.4509,
-          "expected_points": 0.9576,
-=======
           "p_win": 0.0025,
           "p_podium": 0.0128,
           "p_points_finish": 0.1957,
           "p_dnf": 0.2826,
           "expected_position": 15.0362,
           "expected_points": 1.1131,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 13,
           "actual_dnf": false
         },
         {
           "driver_id": "alonso",
           "constructor_id": "aston_martin",
-<<<<<<< HEAD
-          "p_win": 0.002,
-          "p_podium": 0.0159,
-          "p_points_finish": 0.1928,
-          "p_dnf": 0.0886,
-          "expected_position": 14.2814,
-          "expected_points": 1.1041,
-=======
           "p_win": 0.0024,
           "p_podium": 0.0166,
           "p_points_finish": 0.1829,
           "p_dnf": 0.0859,
           "expected_position": 14.4494,
           "expected_points": 1.0739,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 17,
           "actual_dnf": false
         },
         {
-<<<<<<< HEAD
-          "driver_id": "sainz",
-          "constructor_id": "williams",
-          "p_win": 0.0012,
-          "p_podium": 0.0093,
-          "p_points_finish": 0.1367,
-          "p_dnf": 0.3098,
-          "expected_position": 15.9651,
-          "expected_points": 0.7716,
-          "actual_position": 19,
-          "actual_dnf": true
-        },
-        {
-          "driver_id": "bottas",
-          "constructor_id": "cadillac",
-          "p_win": 0.001,
-          "p_podium": 0.0096,
-          "p_points_finish": 0.1137,
-          "p_dnf": 0.1152,
-          "expected_position": 15.8077,
-          "expected_points": 0.6352,
-          "actual_position": 18,
-=======
           "driver_id": "tsunoda",
           "constructor_id": "rb",
           "p_win": 0.0023,
@@ -4185,48 +3982,29 @@
           "expected_position": 15.2225,
           "expected_points": 0.9476,
           "actual_position": 14,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_dnf": false
         },
         {
           "driver_id": "bearman",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.001,
-          "p_podium": 0.0082,
-          "p_points_finish": 0.1228,
-          "p_dnf": 0.3217,
-          "expected_position": 16.3358,
-          "expected_points": 0.6833,
-=======
           "p_win": 0.0014,
           "p_podium": 0.0093,
           "p_points_finish": 0.1099,
           "p_dnf": 0.3323,
           "expected_position": 16.654,
           "expected_points": 0.6291,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 16,
           "actual_dnf": false
         },
         {
           "driver_id": "perez",
           "constructor_id": "cadillac",
-<<<<<<< HEAD
-          "p_win": 0.0008,
-          "p_podium": 0.0044,
-          "p_points_finish": 0.0574,
-          "p_dnf": 0.3142,
-          "expected_position": 17.7268,
-          "expected_points": 0.3256,
-=======
           "p_win": 0.0014,
           "p_podium": 0.0071,
           "p_points_finish": 0.0822,
           "p_dnf": 0.3205,
           "expected_position": 17.1386,
           "expected_points": 0.4691,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 20,
           "actual_dnf": true
         },
@@ -4245,21 +4023,12 @@
         {
           "driver_id": "stroll",
           "constructor_id": "aston_martin",
-<<<<<<< HEAD
-          "p_win": 0.0008,
-          "p_podium": 0.0046,
-          "p_points_finish": 0.0631,
-          "p_dnf": 0.3378,
-          "expected_position": 17.5704,
-          "expected_points": 0.3431,
-=======
           "p_win": 0.0002,
           "p_podium": 0.005,
           "p_points_finish": 0.0668,
           "p_dnf": 0.3516,
           "expected_position": 17.5531,
           "expected_points": 0.372,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": 21,
           "actual_dnf": true
         }
@@ -4275,134 +4044,52 @@
         {
           "driver_id": "russell",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.3064,
-          "p_podium": 0.6847,
-          "p_points_finish": 0.922,
-          "p_dnf": 0.077,
-          "expected_position": 4.149,
-          "expected_points": 16.3188,
-=======
           "p_win": 0.1821,
           "p_podium": 0.4824,
           "p_points_finish": 0.9032,
           "p_dnf": 0.0807,
           "expected_position": 5.3679,
           "expected_points": 13.0248,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "norris",
           "constructor_id": "mclaren",
-<<<<<<< HEAD
-          "p_win": 0.1555,
-          "p_podium": 0.4646,
-          "p_points_finish": 0.9024,
-          "p_dnf": 0.0818,
-          "expected_position": 5.4302,
-          "expected_points": 12.7575,
-=======
           "p_win": 0.1342,
           "p_podium": 0.3821,
           "p_points_finish": 0.878,
           "p_dnf": 0.0801,
           "expected_position": 6.1089,
           "expected_points": 11.2258,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "antonelli",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.1454,
-          "p_podium": 0.4301,
-          "p_points_finish": 0.8985,
-          "p_dnf": 0.0804,
-          "expected_position": 5.6241,
-          "expected_points": 12.2393,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "max_verstappen",
-          "constructor_id": "red_bull",
-          "p_win": 0.0506,
-          "p_podium": 0.184,
-          "p_points_finish": 0.727,
-          "p_dnf": 0.0783,
-          "expected_position": 8.385,
-          "expected_points": 6.8635,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hadjar",
-          "constructor_id": "red_bull",
-          "p_win": 0.0487,
-          "p_podium": 0.1658,
-          "p_points_finish": 0.6946,
-          "p_dnf": 0.0763,
-          "expected_position": 8.6973,
-          "expected_points": 6.4252,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hamilton",
-          "constructor_id": "ferrari",
-          "p_win": 0.0427,
-          "p_podium": 0.1537,
-          "p_points_finish": 0.6734,
-          "p_dnf": 0.0788,
-          "expected_position": 9.019,
-          "expected_points": 5.9974,
-=======
           "p_win": 0.1197,
           "p_podium": 0.3523,
           "p_points_finish": 0.8648,
           "p_dnf": 0.0793,
           "expected_position": 6.3921,
           "expected_points": 10.5835,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "leclerc",
           "constructor_id": "ferrari",
-<<<<<<< HEAD
-          "p_win": 0.0404,
-          "p_podium": 0.1389,
-          "p_points_finish": 0.6446,
-          "p_dnf": 0.0821,
-          "expected_position": 9.3342,
-          "expected_points": 5.6053,
-=======
           "p_win": 0.1007,
           "p_podium": 0.2947,
           "p_points_finish": 0.8327,
           "p_dnf": 0.0814,
           "expected_position": 6.9606,
           "expected_points": 9.4669,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
-<<<<<<< HEAD
-          "driver_id": "piastri",
-          "constructor_id": "mclaren",
-          "p_win": 0.0404,
-          "p_podium": 0.1499,
-          "p_points_finish": 0.6737,
-          "p_dnf": 0.0805,
-          "expected_position": 8.9977,
-          "expected_points": 6.0277,
-=======
           "driver_id": "hamilton",
           "constructor_id": "ferrari",
           "p_win": 0.0758,
@@ -4423,21 +4110,12 @@
           "p_dnf": 0.0774,
           "expected_position": 7.6647,
           "expected_points": 8.0577,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "lawson",
           "constructor_id": "red_bull",
-<<<<<<< HEAD
-          "p_win": 0.0275,
-          "p_podium": 0.1036,
-          "p_points_finish": 0.5453,
-          "p_dnf": 0.0789,
-          "expected_position": 10.2953,
-          "expected_points": 4.4699,
-=======
           "p_win": 0.0577,
           "p_podium": 0.1777,
           "p_points_finish": 0.6985,
@@ -4468,120 +4146,48 @@
           "p_dnf": 0.0793,
           "expected_position": 8.7917,
           "expected_points": 6.3027,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "arvid_lindblad",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0228,
-          "p_podium": 0.0896,
-          "p_points_finish": 0.4924,
-          "p_dnf": 0.0779,
-          "expected_position": 10.9858,
-          "expected_points": 3.8506,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "colapinto",
-          "constructor_id": "alpine",
-          "p_win": 0.018,
-          "p_podium": 0.0615,
-          "p_points_finish": 0.3524,
-          "p_dnf": 0.0786,
-          "expected_position": 12.6097,
-          "expected_points": 2.693,
-=======
           "p_win": 0.0276,
           "p_podium": 0.0909,
           "p_points_finish": 0.4771,
           "p_dnf": 0.0772,
           "expected_position": 10.8537,
           "expected_points": 3.7643,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "gasly",
           "constructor_id": "alpine",
-<<<<<<< HEAD
-          "p_win": 0.0173,
-          "p_podium": 0.0603,
-          "p_points_finish": 0.3691,
-          "p_dnf": 0.0761,
-          "expected_position": 12.4329,
-          "expected_points": 2.7597,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hulkenberg",
-          "constructor_id": "audi",
-          "p_win": 0.015,
-          "p_podium": 0.0524,
-          "p_points_finish": 0.3262,
-          "p_dnf": 0.0807,
-          "expected_position": 12.9675,
-          "expected_points": 2.419,
-=======
           "p_win": 0.0228,
           "p_podium": 0.0753,
           "p_points_finish": 0.4044,
           "p_dnf": 0.0732,
           "expected_position": 11.6033,
           "expected_points": 3.096,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "tsunoda",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0138,
-          "p_podium": 0.049,
-          "p_points_finish": 0.3391,
-          "p_dnf": 0.0782,
-          "expected_position": 12.7944,
-          "expected_points": 2.4577,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "albon",
-          "constructor_id": "williams",
-          "p_win": 0.0093,
-          "p_podium": 0.0306,
-          "p_points_finish": 0.194,
-          "p_dnf": 0.0793,
-          "expected_position": 15.2205,
-          "expected_points": 1.4098,
-=======
           "p_win": 0.0193,
           "p_podium": 0.064,
           "p_points_finish": 0.3716,
           "p_dnf": 0.0769,
           "expected_position": 11.9845,
           "expected_points": 2.7885,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bortoleto",
           "constructor_id": "audi",
-<<<<<<< HEAD
-          "p_win": 0.0092,
-          "p_podium": 0.0391,
-          "p_points_finish": 0.2614,
-          "p_dnf": 0.0814,
-          "expected_position": 14.0169,
-          "expected_points": 1.8772,
-=======
           "p_win": 0.0172,
           "p_podium": 0.058,
           "p_points_finish": 0.3434,
@@ -4612,99 +4218,36 @@
           "p_dnf": 0.0749,
           "expected_position": 12.8569,
           "expected_points": 2.2237,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bearman",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0064,
-          "p_podium": 0.0231,
-          "p_points_finish": 0.1601,
-          "p_dnf": 0.0768,
-          "expected_position": 15.8842,
-          "expected_points": 1.1149,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "sainz",
-          "constructor_id": "williams",
-          "p_win": 0.0063,
-          "p_podium": 0.0235,
-          "p_points_finish": 0.1603,
-          "p_dnf": 0.0843,
-          "expected_position": 15.8497,
-          "expected_points": 1.1238,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "perez",
-          "constructor_id": "cadillac",
-          "p_win": 0.0055,
-          "p_podium": 0.0178,
-          "p_points_finish": 0.1244,
-          "p_dnf": 0.0932,
-          "expected_position": 16.8364,
-          "expected_points": 0.8778,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "stroll",
-          "constructor_id": "aston_martin",
-          "p_win": 0.0052,
-          "p_podium": 0.0216,
-          "p_points_finish": 0.1442,
-          "p_dnf": 0.0945,
-          "expected_position": 16.3774,
-          "expected_points": 1.0014,
-=======
           "p_win": 0.0048,
           "p_podium": 0.0173,
           "p_points_finish": 0.1009,
           "p_dnf": 0.0807,
           "expected_position": 16.6091,
           "expected_points": 0.7186,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "ocon",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0051,
-          "p_podium": 0.0219,
-          "p_points_finish": 0.1506,
-          "p_dnf": 0.0811,
-          "expected_position": 16.1658,
-          "expected_points": 1.0489,
-=======
           "p_win": 0.0047,
           "p_podium": 0.0151,
           "p_points_finish": 0.1092,
           "p_dnf": 0.0833,
           "expected_position": 16.4772,
           "expected_points": 0.74,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "alonso",
           "constructor_id": "aston_martin",
-<<<<<<< HEAD
-          "p_win": 0.0044,
-          "p_podium": 0.0184,
-          "p_points_finish": 0.1335,
-          "p_dnf": 0.0939,
-          "expected_position": 16.6042,
-          "expected_points": 0.901,
-=======
           "p_win": 0.0043,
           "p_podium": 0.0105,
           "p_points_finish": 0.0726,
@@ -4735,21 +4278,12 @@
           "p_dnf": 0.0796,
           "expected_position": 17.0137,
           "expected_points": 0.6078,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bottas",
           "constructor_id": "cadillac",
-<<<<<<< HEAD
-          "p_win": 0.0041,
-          "p_podium": 0.0159,
-          "p_points_finish": 0.1108,
-          "p_dnf": 0.0942,
-          "expected_position": 17.3228,
-          "expected_points": 0.7606,
-=======
           "p_win": 0.0034,
           "p_podium": 0.0106,
           "p_points_finish": 0.0777,
@@ -4780,7 +4314,6 @@
           "p_dnf": 0.0962,
           "expected_position": 17.9599,
           "expected_points": 0.4548,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         }
@@ -4796,134 +4329,52 @@
         {
           "driver_id": "russell",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.3064,
-          "p_podium": 0.6847,
-          "p_points_finish": 0.922,
-          "p_dnf": 0.077,
-          "expected_position": 4.149,
-          "expected_points": 16.3188,
-=======
           "p_win": 0.1821,
           "p_podium": 0.4824,
           "p_points_finish": 0.9032,
           "p_dnf": 0.0807,
           "expected_position": 5.3679,
           "expected_points": 13.0248,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "norris",
           "constructor_id": "mclaren",
-<<<<<<< HEAD
-          "p_win": 0.1555,
-          "p_podium": 0.4646,
-          "p_points_finish": 0.9024,
-          "p_dnf": 0.0818,
-          "expected_position": 5.4302,
-          "expected_points": 12.7575,
-=======
           "p_win": 0.1342,
           "p_podium": 0.3821,
           "p_points_finish": 0.878,
           "p_dnf": 0.0801,
           "expected_position": 6.1089,
           "expected_points": 11.2258,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "antonelli",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.1454,
-          "p_podium": 0.4301,
-          "p_points_finish": 0.8985,
-          "p_dnf": 0.0804,
-          "expected_position": 5.6241,
-          "expected_points": 12.2393,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "max_verstappen",
-          "constructor_id": "red_bull",
-          "p_win": 0.0506,
-          "p_podium": 0.184,
-          "p_points_finish": 0.727,
-          "p_dnf": 0.0783,
-          "expected_position": 8.385,
-          "expected_points": 6.8635,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hadjar",
-          "constructor_id": "red_bull",
-          "p_win": 0.0487,
-          "p_podium": 0.1658,
-          "p_points_finish": 0.6946,
-          "p_dnf": 0.0763,
-          "expected_position": 8.6973,
-          "expected_points": 6.4252,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hamilton",
-          "constructor_id": "ferrari",
-          "p_win": 0.0427,
-          "p_podium": 0.1537,
-          "p_points_finish": 0.6734,
-          "p_dnf": 0.0788,
-          "expected_position": 9.019,
-          "expected_points": 5.9974,
-=======
           "p_win": 0.1197,
           "p_podium": 0.3523,
           "p_points_finish": 0.8648,
           "p_dnf": 0.0793,
           "expected_position": 6.3921,
           "expected_points": 10.5835,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "leclerc",
           "constructor_id": "ferrari",
-<<<<<<< HEAD
-          "p_win": 0.0404,
-          "p_podium": 0.1389,
-          "p_points_finish": 0.6446,
-          "p_dnf": 0.0821,
-          "expected_position": 9.3342,
-          "expected_points": 5.6053,
-=======
           "p_win": 0.1007,
           "p_podium": 0.2947,
           "p_points_finish": 0.8327,
           "p_dnf": 0.0814,
           "expected_position": 6.9606,
           "expected_points": 9.4669,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
-<<<<<<< HEAD
-          "driver_id": "piastri",
-          "constructor_id": "mclaren",
-          "p_win": 0.0404,
-          "p_podium": 0.1499,
-          "p_points_finish": 0.6737,
-          "p_dnf": 0.0805,
-          "expected_position": 8.9977,
-          "expected_points": 6.0277,
-=======
           "driver_id": "hamilton",
           "constructor_id": "ferrari",
           "p_win": 0.0758,
@@ -4944,21 +4395,12 @@
           "p_dnf": 0.0774,
           "expected_position": 7.6647,
           "expected_points": 8.0577,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "lawson",
           "constructor_id": "red_bull",
-<<<<<<< HEAD
-          "p_win": 0.0275,
-          "p_podium": 0.1036,
-          "p_points_finish": 0.5453,
-          "p_dnf": 0.0789,
-          "expected_position": 10.2953,
-          "expected_points": 4.4699,
-=======
           "p_win": 0.0577,
           "p_podium": 0.1777,
           "p_points_finish": 0.6985,
@@ -4989,120 +4431,48 @@
           "p_dnf": 0.0793,
           "expected_position": 8.7917,
           "expected_points": 6.3027,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "arvid_lindblad",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0228,
-          "p_podium": 0.0896,
-          "p_points_finish": 0.4924,
-          "p_dnf": 0.0779,
-          "expected_position": 10.9858,
-          "expected_points": 3.8506,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "colapinto",
-          "constructor_id": "alpine",
-          "p_win": 0.018,
-          "p_podium": 0.0615,
-          "p_points_finish": 0.3524,
-          "p_dnf": 0.0786,
-          "expected_position": 12.6097,
-          "expected_points": 2.693,
-=======
           "p_win": 0.0276,
           "p_podium": 0.0909,
           "p_points_finish": 0.4771,
           "p_dnf": 0.0772,
           "expected_position": 10.8537,
           "expected_points": 3.7643,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "gasly",
           "constructor_id": "alpine",
-<<<<<<< HEAD
-          "p_win": 0.0173,
-          "p_podium": 0.0603,
-          "p_points_finish": 0.3691,
-          "p_dnf": 0.0761,
-          "expected_position": 12.4329,
-          "expected_points": 2.7597,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hulkenberg",
-          "constructor_id": "audi",
-          "p_win": 0.015,
-          "p_podium": 0.0524,
-          "p_points_finish": 0.3262,
-          "p_dnf": 0.0807,
-          "expected_position": 12.9675,
-          "expected_points": 2.419,
-=======
           "p_win": 0.0228,
           "p_podium": 0.0753,
           "p_points_finish": 0.4044,
           "p_dnf": 0.0732,
           "expected_position": 11.6033,
           "expected_points": 3.096,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "tsunoda",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0138,
-          "p_podium": 0.049,
-          "p_points_finish": 0.3391,
-          "p_dnf": 0.0782,
-          "expected_position": 12.7944,
-          "expected_points": 2.4577,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "albon",
-          "constructor_id": "williams",
-          "p_win": 0.0093,
-          "p_podium": 0.0306,
-          "p_points_finish": 0.194,
-          "p_dnf": 0.0793,
-          "expected_position": 15.2205,
-          "expected_points": 1.4098,
-=======
           "p_win": 0.0193,
           "p_podium": 0.064,
           "p_points_finish": 0.3716,
           "p_dnf": 0.0769,
           "expected_position": 11.9845,
           "expected_points": 2.7885,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bortoleto",
           "constructor_id": "audi",
-<<<<<<< HEAD
-          "p_win": 0.0092,
-          "p_podium": 0.0391,
-          "p_points_finish": 0.2614,
-          "p_dnf": 0.0814,
-          "expected_position": 14.0169,
-          "expected_points": 1.8772,
-=======
           "p_win": 0.0172,
           "p_podium": 0.058,
           "p_points_finish": 0.3434,
@@ -5133,99 +4503,36 @@
           "p_dnf": 0.0749,
           "expected_position": 12.8569,
           "expected_points": 2.2237,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bearman",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0064,
-          "p_podium": 0.0231,
-          "p_points_finish": 0.1601,
-          "p_dnf": 0.0768,
-          "expected_position": 15.8842,
-          "expected_points": 1.1149,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "sainz",
-          "constructor_id": "williams",
-          "p_win": 0.0063,
-          "p_podium": 0.0235,
-          "p_points_finish": 0.1603,
-          "p_dnf": 0.0843,
-          "expected_position": 15.8497,
-          "expected_points": 1.1238,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "perez",
-          "constructor_id": "cadillac",
-          "p_win": 0.0055,
-          "p_podium": 0.0178,
-          "p_points_finish": 0.1244,
-          "p_dnf": 0.0932,
-          "expected_position": 16.8364,
-          "expected_points": 0.8778,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "stroll",
-          "constructor_id": "aston_martin",
-          "p_win": 0.0052,
-          "p_podium": 0.0216,
-          "p_points_finish": 0.1442,
-          "p_dnf": 0.0945,
-          "expected_position": 16.3774,
-          "expected_points": 1.0014,
-=======
           "p_win": 0.0048,
           "p_podium": 0.0173,
           "p_points_finish": 0.1009,
           "p_dnf": 0.0807,
           "expected_position": 16.6091,
           "expected_points": 0.7186,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "ocon",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0051,
-          "p_podium": 0.0219,
-          "p_points_finish": 0.1506,
-          "p_dnf": 0.0811,
-          "expected_position": 16.1658,
-          "expected_points": 1.0489,
-=======
           "p_win": 0.0047,
           "p_podium": 0.0151,
           "p_points_finish": 0.1092,
           "p_dnf": 0.0833,
           "expected_position": 16.4772,
           "expected_points": 0.74,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "alonso",
           "constructor_id": "aston_martin",
-<<<<<<< HEAD
-          "p_win": 0.0044,
-          "p_podium": 0.0184,
-          "p_points_finish": 0.1335,
-          "p_dnf": 0.0939,
-          "expected_position": 16.6042,
-          "expected_points": 0.901,
-=======
           "p_win": 0.0043,
           "p_podium": 0.0105,
           "p_points_finish": 0.0726,
@@ -5256,21 +4563,12 @@
           "p_dnf": 0.0796,
           "expected_position": 17.0137,
           "expected_points": 0.6078,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bottas",
           "constructor_id": "cadillac",
-<<<<<<< HEAD
-          "p_win": 0.0041,
-          "p_podium": 0.0159,
-          "p_points_finish": 0.1108,
-          "p_dnf": 0.0942,
-          "expected_position": 17.3228,
-          "expected_points": 0.7606,
-=======
           "p_win": 0.0034,
           "p_podium": 0.0106,
           "p_points_finish": 0.0777,
@@ -5301,7 +4599,6 @@
           "p_dnf": 0.0962,
           "expected_position": 17.9599,
           "expected_points": 0.4548,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         }
@@ -5317,134 +4614,52 @@
         {
           "driver_id": "russell",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.3064,
-          "p_podium": 0.6847,
-          "p_points_finish": 0.922,
-          "p_dnf": 0.077,
-          "expected_position": 4.149,
-          "expected_points": 16.3188,
-=======
           "p_win": 0.1821,
           "p_podium": 0.4824,
           "p_points_finish": 0.9032,
           "p_dnf": 0.0807,
           "expected_position": 5.3679,
           "expected_points": 13.0248,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "norris",
           "constructor_id": "mclaren",
-<<<<<<< HEAD
-          "p_win": 0.1555,
-          "p_podium": 0.4646,
-          "p_points_finish": 0.9024,
-          "p_dnf": 0.0818,
-          "expected_position": 5.4302,
-          "expected_points": 12.7575,
-=======
           "p_win": 0.1342,
           "p_podium": 0.3821,
           "p_points_finish": 0.878,
           "p_dnf": 0.0801,
           "expected_position": 6.1089,
           "expected_points": 11.2258,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "antonelli",
           "constructor_id": "mercedes",
-<<<<<<< HEAD
-          "p_win": 0.1454,
-          "p_podium": 0.4301,
-          "p_points_finish": 0.8985,
-          "p_dnf": 0.0804,
-          "expected_position": 5.6241,
-          "expected_points": 12.2393,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "max_verstappen",
-          "constructor_id": "red_bull",
-          "p_win": 0.0506,
-          "p_podium": 0.184,
-          "p_points_finish": 0.727,
-          "p_dnf": 0.0783,
-          "expected_position": 8.385,
-          "expected_points": 6.8635,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hadjar",
-          "constructor_id": "red_bull",
-          "p_win": 0.0487,
-          "p_podium": 0.1658,
-          "p_points_finish": 0.6946,
-          "p_dnf": 0.0763,
-          "expected_position": 8.6973,
-          "expected_points": 6.4252,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hamilton",
-          "constructor_id": "ferrari",
-          "p_win": 0.0427,
-          "p_podium": 0.1537,
-          "p_points_finish": 0.6734,
-          "p_dnf": 0.0788,
-          "expected_position": 9.019,
-          "expected_points": 5.9974,
-=======
           "p_win": 0.1197,
           "p_podium": 0.3523,
           "p_points_finish": 0.8648,
           "p_dnf": 0.0793,
           "expected_position": 6.3921,
           "expected_points": 10.5835,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "leclerc",
           "constructor_id": "ferrari",
-<<<<<<< HEAD
-          "p_win": 0.0404,
-          "p_podium": 0.1389,
-          "p_points_finish": 0.6446,
-          "p_dnf": 0.0821,
-          "expected_position": 9.3342,
-          "expected_points": 5.6053,
-=======
           "p_win": 0.1007,
           "p_podium": 0.2947,
           "p_points_finish": 0.8327,
           "p_dnf": 0.0814,
           "expected_position": 6.9606,
           "expected_points": 9.4669,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
-<<<<<<< HEAD
-          "driver_id": "piastri",
-          "constructor_id": "mclaren",
-          "p_win": 0.0404,
-          "p_podium": 0.1499,
-          "p_points_finish": 0.6737,
-          "p_dnf": 0.0805,
-          "expected_position": 8.9977,
-          "expected_points": 6.0277,
-=======
           "driver_id": "hamilton",
           "constructor_id": "ferrari",
           "p_win": 0.0758,
@@ -5465,21 +4680,12 @@
           "p_dnf": 0.0774,
           "expected_position": 7.6647,
           "expected_points": 8.0577,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "lawson",
           "constructor_id": "red_bull",
-<<<<<<< HEAD
-          "p_win": 0.0275,
-          "p_podium": 0.1036,
-          "p_points_finish": 0.5453,
-          "p_dnf": 0.0789,
-          "expected_position": 10.2953,
-          "expected_points": 4.4699,
-=======
           "p_win": 0.0577,
           "p_podium": 0.1777,
           "p_points_finish": 0.6985,
@@ -5510,120 +4716,48 @@
           "p_dnf": 0.0793,
           "expected_position": 8.7917,
           "expected_points": 6.3027,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "arvid_lindblad",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0228,
-          "p_podium": 0.0896,
-          "p_points_finish": 0.4924,
-          "p_dnf": 0.0779,
-          "expected_position": 10.9858,
-          "expected_points": 3.8506,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "colapinto",
-          "constructor_id": "alpine",
-          "p_win": 0.018,
-          "p_podium": 0.0615,
-          "p_points_finish": 0.3524,
-          "p_dnf": 0.0786,
-          "expected_position": 12.6097,
-          "expected_points": 2.693,
-=======
           "p_win": 0.0276,
           "p_podium": 0.0909,
           "p_points_finish": 0.4771,
           "p_dnf": 0.0772,
           "expected_position": 10.8537,
           "expected_points": 3.7643,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "gasly",
           "constructor_id": "alpine",
-<<<<<<< HEAD
-          "p_win": 0.0173,
-          "p_podium": 0.0603,
-          "p_points_finish": 0.3691,
-          "p_dnf": 0.0761,
-          "expected_position": 12.4329,
-          "expected_points": 2.7597,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "hulkenberg",
-          "constructor_id": "audi",
-          "p_win": 0.015,
-          "p_podium": 0.0524,
-          "p_points_finish": 0.3262,
-          "p_dnf": 0.0807,
-          "expected_position": 12.9675,
-          "expected_points": 2.419,
-=======
           "p_win": 0.0228,
           "p_podium": 0.0753,
           "p_points_finish": 0.4044,
           "p_dnf": 0.0732,
           "expected_position": 11.6033,
           "expected_points": 3.096,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "tsunoda",
           "constructor_id": "rb",
-<<<<<<< HEAD
-          "p_win": 0.0138,
-          "p_podium": 0.049,
-          "p_points_finish": 0.3391,
-          "p_dnf": 0.0782,
-          "expected_position": 12.7944,
-          "expected_points": 2.4577,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "albon",
-          "constructor_id": "williams",
-          "p_win": 0.0093,
-          "p_podium": 0.0306,
-          "p_points_finish": 0.194,
-          "p_dnf": 0.0793,
-          "expected_position": 15.2205,
-          "expected_points": 1.4098,
-=======
           "p_win": 0.0193,
           "p_podium": 0.064,
           "p_points_finish": 0.3716,
           "p_dnf": 0.0769,
           "expected_position": 11.9845,
           "expected_points": 2.7885,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bortoleto",
           "constructor_id": "audi",
-<<<<<<< HEAD
-          "p_win": 0.0092,
-          "p_podium": 0.0391,
-          "p_points_finish": 0.2614,
-          "p_dnf": 0.0814,
-          "expected_position": 14.0169,
-          "expected_points": 1.8772,
-=======
           "p_win": 0.0172,
           "p_podium": 0.058,
           "p_points_finish": 0.3434,
@@ -5654,99 +4788,36 @@
           "p_dnf": 0.0749,
           "expected_position": 12.8569,
           "expected_points": 2.2237,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bearman",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0064,
-          "p_podium": 0.0231,
-          "p_points_finish": 0.1601,
-          "p_dnf": 0.0768,
-          "expected_position": 15.8842,
-          "expected_points": 1.1149,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "sainz",
-          "constructor_id": "williams",
-          "p_win": 0.0063,
-          "p_podium": 0.0235,
-          "p_points_finish": 0.1603,
-          "p_dnf": 0.0843,
-          "expected_position": 15.8497,
-          "expected_points": 1.1238,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "perez",
-          "constructor_id": "cadillac",
-          "p_win": 0.0055,
-          "p_podium": 0.0178,
-          "p_points_finish": 0.1244,
-          "p_dnf": 0.0932,
-          "expected_position": 16.8364,
-          "expected_points": 0.8778,
-          "actual_position": null,
-          "actual_dnf": null
-        },
-        {
-          "driver_id": "stroll",
-          "constructor_id": "aston_martin",
-          "p_win": 0.0052,
-          "p_podium": 0.0216,
-          "p_points_finish": 0.1442,
-          "p_dnf": 0.0945,
-          "expected_position": 16.3774,
-          "expected_points": 1.0014,
-=======
           "p_win": 0.0048,
           "p_podium": 0.0173,
           "p_points_finish": 0.1009,
           "p_dnf": 0.0807,
           "expected_position": 16.6091,
           "expected_points": 0.7186,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "ocon",
           "constructor_id": "haas",
-<<<<<<< HEAD
-          "p_win": 0.0051,
-          "p_podium": 0.0219,
-          "p_points_finish": 0.1506,
-          "p_dnf": 0.0811,
-          "expected_position": 16.1658,
-          "expected_points": 1.0489,
-=======
           "p_win": 0.0047,
           "p_podium": 0.0151,
           "p_points_finish": 0.1092,
           "p_dnf": 0.0833,
           "expected_position": 16.4772,
           "expected_points": 0.74,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "alonso",
           "constructor_id": "aston_martin",
-<<<<<<< HEAD
-          "p_win": 0.0044,
-          "p_podium": 0.0184,
-          "p_points_finish": 0.1335,
-          "p_dnf": 0.0939,
-          "expected_position": 16.6042,
-          "expected_points": 0.901,
-=======
           "p_win": 0.0043,
           "p_podium": 0.0105,
           "p_points_finish": 0.0726,
@@ -5777,21 +4848,12 @@
           "p_dnf": 0.0796,
           "expected_position": 17.0137,
           "expected_points": 0.6078,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         },
         {
           "driver_id": "bottas",
           "constructor_id": "cadillac",
-<<<<<<< HEAD
-          "p_win": 0.0041,
-          "p_podium": 0.0159,
-          "p_points_finish": 0.1108,
-          "p_dnf": 0.0942,
-          "expected_position": 17.3228,
-          "expected_points": 0.7606,
-=======
           "p_win": 0.0034,
           "p_podium": 0.0106,
           "p_points_finish": 0.0777,
@@ -5822,7 +4884,6 @@
           "p_dnf": 0.0962,
           "expected_position": 17.9599,
           "expected_points": 0.4548,
->>>>>>> 424a69a (Complete the honest track record: real snapshot/reconcile job + session predictions in public snapshot)
           "actual_position": null,
           "actual_dnf": null
         }
