@@ -36,12 +36,15 @@ function Result({ rank, p }: { rank: number; p: SessionDriverPrediction }) {
   if (p.actual_position == null) return null;
   const gain = rank - p.actual_position; // positive: finished ahead of our rank
   return (
-    <span className="flex flex-col items-end leading-tight">
+    <span>
       <span className={`font-semibold ${p.actual_position <= 3 ? "text-pr-lean" : "text-pr-text"}`}>Finished P{p.actual_position}</span>
       {gain !== 0 && (
-        <span className={`text-xs ${gain > 0 ? "text-pr-win" : "text-pr-loss"}`}>
-          {Math.abs(gain)} {Math.abs(gain) === 1 ? "place" : "places"} {gain > 0 ? "better" : "worse"}
-        </span>
+        <>
+          <span aria-hidden="true"> · </span>
+          <span className={gain > 0 ? "text-pr-win" : "text-pr-loss"}>
+            {Math.abs(gain)} {Math.abs(gain) === 1 ? "place" : "places"} {gain > 0 ? "better" : "worse"}
+          </span>
+        </>
       )}
     </span>
   );
@@ -127,7 +130,7 @@ export function TimingTower({ predictions, season, round, sessionType }: Props) 
                     <span className="block h-full rounded-full bg-pr-accent" style={{ width: `${Math.max(2, share * 100)}%` }} />
                   </span>
                 </span>
-                <span className="col-span-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 pl-[3.5rem] text-xs text-pr-text-dim sm:col-span-1 sm:pl-0">
+                <span className="col-span-3 flex flex-col gap-0.5 pl-[3.5rem] text-xs text-pr-text-dim sm:col-span-1 sm:pl-0">
                   <span>{secondary.map((m) => `${m.label} ${pct(value(p, m.key))}`).join(" · ")}</span>
                   {hasResults && <Result rank={rank} p={p} />}
                 </span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { RaceSummary } from "../types";
 import { ErrorState, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
@@ -29,6 +29,14 @@ export function RacesPage() {
 
   const selected = useMemo(() => races?.find((r) => r.round === selectedRound) ?? null, [races, selectedRound]);
   const nextRound = races?.find((r) => !r.completed)?.round;
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Late in the season the next race sits far down the list: bring the
+  // selected one into view (within the list only) when the season loads.
+  useEffect(() => {
+    const current = listRef.current?.querySelector<HTMLElement>("[aria-current]");
+    current?.scrollIntoView?.({ block: "nearest" });
+  }, [races]);
 
   if (error) {
     return <ErrorState message="We couldn't load the season. Check your connection and try again." onRetry={() => setReloadKey((k) => k + 1)} />;
@@ -53,7 +61,7 @@ export function RacesPage() {
         </select>
       </label>
 
-      <ul aria-label="Races" className="hidden max-h-[75vh] overflow-y-auto rounded-pr border border-pr-rule bg-pr-panel p-1 lg:block">
+      <ul ref={listRef} aria-label="Races" className="hidden max-h-[75vh] overflow-y-auto rounded-pr border border-pr-rule bg-pr-panel p-1 lg:block">
         {races.map((race) => {
           const current = race.round === selectedRound;
           return (
@@ -66,23 +74,22 @@ export function RacesPage() {
                   current ? "bg-pr-panel-2 ring-1 ring-inset ring-pr-accent" : "hover:bg-pr-panel-2"
                 }`}
               >
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
                     <span className="font-pr-display text-sm font-semibold tabular-nums text-pr-text-dim">R{race.round}</span>
-                    <span className="truncate text-sm font-semibold text-pr-text">{race.race_name}</span>
+                    <span className="text-sm font-semibold leading-snug text-pr-text">{race.race_name}</span>
                   </span>
-                  <span className="flex items-center gap-2 text-xs text-pr-text-dim">
+                  <span className="flex flex-wrap items-center gap-x-2 text-xs text-pr-text-dim">
                     {day(race)}
                     {race.is_sprint_weekend && <span className="font-semibold uppercase tracking-wide text-pr-lean">Sprint</span>}
+                    {race.completed && <span>· Completed</span>}
                   </span>
                 </span>
-                <span className="shrink-0">
-                  {race.round === nextRound ? (
+                {race.round === nextRound && (
+                  <span className="shrink-0">
                     <StatusBadge status="next" />
-                  ) : (
-                    <span className="text-xs uppercase tracking-wide text-pr-text-dim">{race.completed ? "Completed" : "Upcoming"}</span>
-                  )}
-                </span>
+                  </span>
+                )}
               </button>
             </li>
           );
