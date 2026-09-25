@@ -211,6 +211,13 @@ def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tup
     return sim, tier
 
 
+def _tracked_or_rebuilt(rows: list[dict]) -> str:
+    """'tracked' only when every stored row was snapshotted before the
+    session started; a snapshot written afterwards is 'rebuilt'."""
+    pre = all(store.made_before_session(r["snapshotted_at"], r["session_time"]) for r in rows)
+    return "tracked" if pre else "rebuilt"
+
+
 def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, str, str]:
     """A race that's already happened: prefer the honest snapshot recorded
     in tracking/store.py *before* it happened; fall back to an on-demand
@@ -234,7 +241,7 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
         pivot = pivot.merge(extra, on="driver_id", how="left")
         pivot["expected_position"] = float("nan")
         pivot["expected_points"] = float("nan")
-        return pivot, session_state.TIER_POST_QUALIFYING, "tracked"
+        return pivot, session_state.TIER_POST_QUALIFYING, _tracked_or_rebuilt(tracked)
 
     result = backtest_lib.backtest_race(season, round_)
     result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
@@ -340,7 +347,7 @@ def _completed_session_prediction(season: int, round_: int, session_type: str) -
         pivot = pivot.merge(extra, on="driver_id", how="left")
         if "expected_position" not in pivot.columns:
             pivot["expected_position"] = float("nan")
-        return pivot, spec.feature_cutoff_tier, "tracked"
+        return pivot, spec.feature_cutoff_tier, _tracked_or_rebuilt(tracked)
 
     result = backtest_lib.backtest_session(season, round_, session_type=session_type)
     result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
@@ -670,7 +677,11 @@ def _get_championship_live(championship: str, season: int, n_trials: int) -> Cha
 def get_track_record(tier: str | None = None, session_type: str | None = None) -> TrackRecordResponse:
     result = store.get_session_track_record(session_type=session_type, tier=tier)
     by_market = [{k: v for k, v in row.items() if k != "session_type"} for row in result["by_market"]]
-    return TrackRecordResponse(n_resolved=result["n_resolved"], by_market=[TrackRecordEntry(**row) for row in by_market])
+    return TrackRecordResponse(
+        n_resolved=result["n_resolved"],
+        by_market=[TrackRecordEntry(**row) for row in by_market],
+        n_rebuilt_sessions=result.get("n_rebuilt_sessions", 0),
+    )
 
 
 @router.get("/track-record/by-race", response_model=list[RaceAccuracyEntry])

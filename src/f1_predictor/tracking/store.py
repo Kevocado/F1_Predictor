@@ -277,11 +277,34 @@ def record_championship_snapshot(projection: dict) -> int:
         return cur.rowcount
 
 
+def made_before_session(snapshotted_at: str, session_time: str) -> bool:
+    """True only when both times parse and the snapshot came strictly before
+    the session. Anything written at or after the start (a seeded or
+    back-filled snapshot) is rebuilt: shown, never counted."""
+    try:
+        snap = pd.Timestamp(snapshotted_at)
+        start = pd.Timestamp(session_time)
+    except (TypeError, ValueError):
+        return False
+    snap = snap.tz_localize("UTC") if snap.tzinfo is None else snap
+    start = start.tz_localize("UTC") if start.tzinfo is None else start
+    return bool(snap < start)
+
+
+def _flag_pre_session(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["pre_session"] = [made_before_session(a, b) for a, b in zip(df["snapshotted_at"], df["session_time"])]
+    return df
+
+
 def get_session_track_record(session_type: str | None = None, tier: str | None = None) -> dict:
     """Overall hit-rate/calibration summary, optionally filtered to one
     session type and/or tier."""
     with _connect() as conn:
-        query = "SELECT session_type, tier, market, predicted_prob, actual_outcome FROM session_predictions WHERE resolved = 1"
+        query = (
+            "SELECT season, round, session_type, tier, market, predicted_prob, actual_outcome, snapshotted_at, session_time "
+            "FROM session_predictions WHERE resolved = 1"
+        )
         params: list = []
         if session_type:
             query += " AND session_type = ?"
@@ -292,7 +315,14 @@ def get_session_track_record(session_type: str | None = None, tier: str | None =
         df = pd.read_sql(query, conn, params=params)
 
     if df.empty:
-        return {"n_resolved": 0, "by_market": []}
+        return {"n_resolved": 0, "by_market": [], "n_rebuilt_sessions": 0}
+
+    # Only snapshots made before their session are judged.
+    df = _flag_pre_session(df)
+    rebuilt = df.loc[~df["pre_session"], ["season", "round", "session_type", "tier"]].drop_duplicates()
+    df = df[df["pre_session"]]
+    if df.empty:
+        return {"n_resolved": 0, "by_market": [], "n_rebuilt_sessions": int(len(rebuilt))}
 
     rows = []
     for (st, t, market), g in df.groupby(["session_type", "tier", "market"]):
@@ -308,7 +338,7 @@ def get_session_track_record(session_type: str | None = None, tier: str | None =
                 "avg_predicted_prob": float(g["predicted_prob"].mean()),
             }
         )
-    return {"n_resolved": int(len(df)), "by_market": rows}
+    return {"n_resolved": int(len(df)), "by_market": rows, "n_rebuilt_sessions": int(len(rebuilt))}
 
 
 def get_session_accuracy(session_type: str | None = None, tier: str | None = None) -> list[dict]:
@@ -318,8 +348,8 @@ def get_session_accuracy(session_type: str | None = None, tier: str | None = Non
     top_n_by_market = {"win": 1, "pole": 1, "podium": 3, "top_3": 3, "points_finish": 10, "top_10": 10}
     with _connect() as conn:
         query = (
-            "SELECT season, round, race_name, session_type, tier, driver_id, market, predicted_prob, actual_outcome "
-            "FROM session_predictions WHERE resolved = 1 AND market != 'dnf'"
+            "SELECT season, round, race_name, session_type, tier, driver_id, market, predicted_prob, actual_outcome, "
+            "snapshotted_at, session_time FROM session_predictions WHERE resolved = 1 AND market != 'dnf'"
         )
         params: list = []
         if session_type:
@@ -335,7 +365,12 @@ def get_session_accuracy(session_type: str | None = None, tier: str | None = Non
 
     rows = []
     for (season, round_, race_name, st, t), race_df in df.groupby(["season", "round", "race_name", "session_type", "tier"]):
-        row = {"season": int(season), "round": int(round_), "race_name": race_name, "session_type": st, "tier": t}
+        # A session counts only if every snapshot row was made before it.
+        pre = all(made_before_session(a, b) for a, b in zip(race_df["snapshotted_at"], race_df["session_time"]))
+        row = {
+            "season": int(season), "round": int(round_), "race_name": race_name, "session_type": st, "tier": t,
+            "rebuilt": not pre,
+        }
         for market in race_df["market"].unique():
             n = top_n_by_market.get(market)
             if n is None:
