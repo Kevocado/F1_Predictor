@@ -10,30 +10,32 @@ import type {
   TrackRecordResponse,
 } from "../types";
 
-// Derived from wherever this page was loaded from, not hardcoded to
-// "localhost" — that would resolve to the *viewing device*, not the
-// machine actually running the backend. The public Docker build sets
-// VITE_API_BASE_URL=/api (frontend + backend share one origin there);
-// local dev leaves it unset and falls back to the separate dev-server port.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? `${window.location.protocol}//${window.location.hostname}:8000/api`;
+// Same-origin /api: the public Docker build serves frontend and backend
+// together, and the dev server proxies /api to the local backend (see
+// vite.config.ts). VITE_API_BASE_URL still overrides it.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `${res.status} ${res.statusText}`);
+// A backend that accepts the connection but never answers must still end in
+// the page's error state (with Try again), never an endless "Loading…".
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, { ...init, signal: controller.signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(body.detail ?? `${res.status} ${res.statusText}`, res.status);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
-async function post<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { method: "POST" });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `${res.status} ${res.statusText}`);
-  }
-  return res.json();
-}
+const get = <T,>(path: string) => request<T>(path);
+const post = <T,>(path: string) => request<T>(path, { method: "POST" });
 
 export const api = {
   races: (season?: number) => get<RaceSummary[]>(season ? `/races?season=${season}` : "/races"),
@@ -70,4 +72,10 @@ export const api = {
   retrain: () => post<RetrainResponse>("/retrain"),
 };
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
