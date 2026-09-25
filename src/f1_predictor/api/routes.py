@@ -218,6 +218,18 @@ def _tracked_or_rebuilt(rows: list[dict]) -> str:
     return "tracked" if pre else "rebuilt"
 
 
+def honest_source(season: int, round_: int, session_type: str, prediction: dict) -> dict:
+    """A stored prediction keeps its numbers but never a stale label: it is
+    'tracked' only if its snapshot was written before its session. Applied
+    to precomputed public snapshots, which may predate this rule."""
+    if prediction.get("source") != "tracked":
+        return prediction
+    rows = store.get_session_prediction(season, round_, session_type, tier=prediction.get("tier"))
+    if rows and _tracked_or_rebuilt(rows) == "rebuilt":
+        prediction = {**prediction, "source": "rebuilt"}
+    return prediction
+
+
 def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, str, str]:
     """A race that's already happened: prefer the honest snapshot recorded
     in tracking/store.py *before* it happened; fall back to an on-demand
@@ -370,7 +382,7 @@ def _get_session_prediction_response(season: int, round_: int, session_type: str
         if snap is not None:
             pred = snap.get("session_predictions", {}).get(session_type, {}).get(str(round_))
             if pred is not None:
-                return pred
+                return honest_source(season, round_, session_type, pred)
     return _get_session_prediction_live(season, round_, session_type)
 
 
@@ -530,7 +542,7 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
         if snap is not None:
             pred = snap["predictions"].get(str(round_))
             if pred is not None:
-                return pred
+                return honest_source(season, round_, "race", pred)
     return _get_race_prediction_live(season, round_)
 
 

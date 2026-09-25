@@ -85,3 +85,19 @@ def test_completed_race_serves_a_pre_race_snapshot_as_tracked():
     _, _, source = routes._completed_race_prediction(2026, 1)
 
     assert source == "tracked"
+
+
+def test_stored_late_prediction_is_relabelled_rebuilt():
+    """Public snapshots store predictions verbatim (and build_snapshot reuses
+    older rounds); one saved as 'tracked' before this fix must not keep it,
+    whether it is reused at build time or served as-is."""
+    from f1_predictor.api import routes
+
+    _record_and_resolve(2, PAST)
+    _record_and_resolve(1, FUTURE)
+    stale = {"source": "tracked", "tier": "post_qualifying", "predictions": []}
+
+    assert routes.honest_source(2026, 2, "race", dict(stale))["source"] == "rebuilt"
+    assert routes.honest_source(2026, 1, "race", dict(stale))["source"] == "tracked"
+    live = {"source": "live", "predictions": []}
+    assert routes.honest_source(2026, 3, "race", dict(live))["source"] == "live"
