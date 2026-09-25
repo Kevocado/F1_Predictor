@@ -117,7 +117,7 @@ export interface RaceAccuracyEntry {
   race_name: string;
   tier: string;
   /** Snapshot written after the session ran: shown, never counted. */
-  rebuilt?: boolean;
+  rebuilt: boolean;
   win_predicted: string[];
   win_actual: string[];
   win_hits: number;

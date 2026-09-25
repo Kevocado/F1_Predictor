@@ -81,3 +81,25 @@ describe("TimingTower", () => {
     expect(explain).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("TimingTower explanations", () => {
+  it("keeps each driver's explanation to that driver's row, even when an earlier request fails late", async () => {
+    let failA: (e: Error) => void = () => {};
+    vi.spyOn(api, "explainPrediction").mockImplementation((_s, _r, driverId) =>
+      driverId === "max_verstappen"
+        ? new Promise((_res, rej) => { failA = rej; })
+        : Promise.resolve({
+            season: 2026, round: 5, driver_id: driverId, candidate: "x",
+            strength_contributors: [{ feature: "quali_position", value: 2, contribution: 0.3 }], dnf_contributors: [],
+          }),
+    );
+    render(<TimingTower predictions={grid} sessionType="race" season={2026} round={5} />);
+    await userEvent.click(screen.getByRole("button", { name: /Max Verstappen/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Lando Norris/ }));
+    expect(await screen.findByText("Qualifying position")).toBeInTheDocument();
+    failA(new Error("boom"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByText("Qualifying position")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});

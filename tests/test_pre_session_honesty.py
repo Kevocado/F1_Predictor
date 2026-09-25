@@ -101,3 +101,63 @@ def test_stored_late_prediction_is_relabelled_rebuilt():
     assert routes.honest_source(2026, 1, "race", dict(stale))["source"] == "tracked"
     live = {"source": "live", "predictions": []}
     assert routes.honest_source(2026, 3, "race", dict(live))["source"] == "live"
+
+
+def test_completed_race_serves_an_earlier_tier_snapshot_that_beat_the_session():
+    """The cron may miss the qualifying-to-race gap: a pre-weekend snapshot
+    made in time is still the honest pick, and beats a late post-qualifying one."""
+    from f1_predictor.api import routes
+
+    store.record_session_predictions(_sim(0.7), 2026, 4, "GP 4", "race", "pre_weekend", FUTURE)
+    store.record_session_predictions(_sim(0.2), 2026, 4, "GP 4", "race", "post_qualifying", PAST)
+
+    sim, tier, source = routes._completed_race_prediction(2026, 4)
+
+    assert (tier, source) == ("pre_weekend", "tracked")
+    assert sim.set_index("driver_id").loc["norris", "p_win"] == 0.7
+
+
+def test_completed_sprint_weekend_qualifying_finds_its_post_sprint_snapshot():
+    from f1_predictor.api import routes
+
+    store.record_session_predictions(_sim(), 2026, 6, "GP 6", "qualifying", "post_sprint", FUTURE)
+
+    _, tier, source = routes._completed_session_prediction(2026, 6, "qualifying")
+
+    assert (tier, source) == ("post_sprint", "tracked")
+
+
+def test_a_session_with_any_late_row_is_rebuilt_everywhere():
+    """Calibration and the per-race table agree: one late insert makes the
+    whole session rebuilt, not half-counted."""
+    store.record_session_predictions(_sim(), 2026, 7, "GP 7", "race", "post_qualifying", FUTURE)
+    late = pd.DataFrame([{"driver_id": "new_driver", "constructor_id": "haas", "p_win": 0.01, "p_podium": 0.02, "p_points_finish": 0.1, "p_dnf": 0.1}])
+    with store._connect() as conn:
+        conn.execute("UPDATE session_predictions SET session_time = ? WHERE round = 7", (PAST,))
+        conn.execute("UPDATE session_predictions SET snapshotted_at = ? WHERE round = 7", ("2019-12-31T00:00:00+00:00",))
+    store.record_session_predictions(late, 2026, 7, "GP 7", "race", "post_qualifying", PAST)
+    store.reconcile_session_predictions(pd.concat([_results(7), pd.DataFrame([{"season": 2026, "round": 7, "driver_id": "new_driver", "position": 20, "dnf": False}])]), "race")
+
+    record = store.get_session_track_record(session_type="race")
+
+    assert record["n_resolved"] == 0
+    assert record["n_rebuilt_sessions"] == 1
+
+
+def test_a_stored_tracked_label_with_nothing_to_verify_it_is_downgraded():
+    from f1_predictor.api import routes
+
+    out = routes.honest_source(2026, 9, "race", {"source": "tracked", "tier": "post_qualifying", "predictions": []})
+
+    assert out["source"] == "rebuilt"
+
+
+def test_public_mode_serving_relabels_a_stale_snapshot(monkeypatch):
+    from f1_predictor.api import routes
+
+    _record_and_resolve(2, PAST)
+    snap = {"season": 2026, "predictions": {"2": {"season": 2026, "round": 2, "race_name": "GP 2", "tier": "post_qualifying", "source": "tracked", "predictions": []}}}
+    monkeypatch.setattr(routes, "PUBLIC_MODE", True)
+    monkeypatch.setattr(routes, "_public_snapshot", lambda: snap)
+
+    assert routes.get_race_prediction(2026, 2)["source"] == "rebuilt"

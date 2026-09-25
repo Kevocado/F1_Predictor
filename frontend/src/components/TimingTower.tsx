@@ -67,22 +67,25 @@ export function TimingTower({ predictions, season, round, sessionType }: Props) 
 
   const [open, setOpen] = useState<string | null>(null);
   const [explain, setExplain] = useState<Record<string, ExplainResponse>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<string | null>(null);
+  // Loading and errors are kept per driver, so a slow or failed request for
+  // one driver never lands on another driver's open row.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState<Record<string, boolean>>({});
   // Each session type explains a different prediction for the same driver.
   const cacheKey = (driverId: string) => `${sessionType}:${driverId}`;
 
   const toggle = (driverId: string) => {
     if (open === driverId) return setOpen(null);
     setOpen(driverId);
-    setError(null);
-    if (explain[cacheKey(driverId)]) return;
-    setLoading(driverId);
+    const key = cacheKey(driverId);
+    if (explain[key] || loading[key]) return;
+    setErrors(({ [key]: _, ...rest }) => rest);
+    setLoading((prev) => ({ ...prev, [key]: true }));
     api
       .explainPrediction(season, round, driverId, sessionType)
-      .then((res) => setExplain((prev) => ({ ...prev, [cacheKey(driverId)]: res })))
-      .catch(() => setError("We couldn't load what's driving this prediction. Try opening it again."))
-      .finally(() => setLoading(null));
+      .then((res) => setExplain((prev) => ({ ...prev, [key]: res })))
+      .catch(() => setErrors((prev) => ({ ...prev, [key]: "We couldn't load what's driving this prediction. Try opening it again." })))
+      .finally(() => setLoading(({ [key]: _, ...rest }) => rest));
   };
 
   return (
@@ -141,14 +144,14 @@ export function TimingTower({ predictions, season, round, sessionType }: Props) 
                     title={`What's driving ${driverName(p.driver_id)}'s chances`}
                     note={kind === "race" ? "Win, podium and points share one strength prediction; DNF risk comes from a separate reliability model." : "Pole, top 3 and top 10 share one strength prediction."}
                     contributors={explain[cacheKey(p.driver_id)]?.strength_contributors ?? null}
-                    loading={loading === p.driver_id}
-                    error={error}
+                    loading={!!loading[cacheKey(p.driver_id)]}
+                    error={errors[cacheKey(p.driver_id)] ?? null}
                   />
                   {kind === "race" && (
                     <ExplainRibbon
                       title={`What's driving ${driverName(p.driver_id)}'s DNF risk`}
                       contributors={explain[cacheKey(p.driver_id)]?.dnf_contributors ?? null}
-                      loading={loading === p.driver_id}
+                      loading={!!loading[cacheKey(p.driver_id)]}
                       error={null}
                     />
                   )}

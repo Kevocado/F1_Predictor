@@ -34,8 +34,10 @@ export function RacesPage() {
   // Late in the season the next race sits far down the list: bring the
   // selected one into view (within the list only) when the season loads.
   useEffect(() => {
-    const current = listRef.current?.querySelector<HTMLElement>("[aria-current]");
-    current?.scrollIntoView?.({ block: "nearest" });
+    // Scroll the list box itself; scrollIntoView could also scroll the page.
+    const list = listRef.current;
+    const current = list?.querySelector<HTMLElement>("[aria-current]");
+    if (list && current) list.scrollTop = current.offsetTop - list.clientHeight / 2 + current.offsetHeight / 2;
   }, [races]);
 
   if (error) {
@@ -61,7 +63,7 @@ export function RacesPage() {
         </select>
       </label>
 
-      <ul ref={listRef} aria-label="Races" className="hidden max-h-[75vh] overflow-y-auto rounded-pr border border-pr-rule bg-pr-panel p-1 lg:block">
+      <ul ref={listRef} aria-label="Races" className="relative hidden max-h-[75vh] overflow-y-auto rounded-pr border border-pr-rule bg-pr-panel p-1 lg:block">
         {races.map((race) => {
           const current = race.round === selectedRound;
           return (

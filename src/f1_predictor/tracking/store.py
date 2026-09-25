@@ -318,8 +318,12 @@ def get_session_track_record(session_type: str | None = None, tier: str | None =
         return {"n_resolved": 0, "by_market": [], "n_rebuilt_sessions": 0}
 
     # Only snapshots made before their session are judged.
+    # A session counts only if every one of its rows was made before it --
+    # the same rule get_session_accuracy applies, so the two never disagree.
     df = _flag_pre_session(df)
-    rebuilt = df.loc[~df["pre_session"], ["season", "round", "session_type", "tier"]].drop_duplicates()
+    session_keys = ["season", "round", "session_type", "tier"]
+    df["pre_session"] = df.groupby(session_keys)["pre_session"].transform("all")
+    rebuilt = df.loc[~df["pre_session"], session_keys].drop_duplicates()
     df = df[df["pre_session"]]
     if df.empty:
         return {"n_resolved": 0, "by_market": [], "n_rebuilt_sessions": int(len(rebuilt))}
