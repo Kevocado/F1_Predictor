@@ -29,6 +29,8 @@ export function InfoTooltip({ text, align = "center" }: Props) {
   return (
     <span
       ref={iconRef}
+      role="button"
+      aria-label={text}
       className="relative inline-flex cursor-help align-middle"
       onMouseEnter={show}
       onMouseLeave={() => setOpen(false)}
@@ -36,14 +38,15 @@ export function InfoTooltip({ text, align = "center" }: Props) {
       onBlur={() => setOpen(false)}
       tabIndex={0}
     >
-      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-f1-700 text-[9px] font-bold leading-none text-f1-text-dim ring-1 ring-f1-border transition hover:bg-f1-red hover:text-white">
+      <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-full bg-pr-panel-2 text-xs font-bold leading-none text-pr-text-dim ring-1 ring-pr-rule transition-colors hover:bg-pr-accent hover:text-pr-accent-ink">
         ?
       </span>
       {open &&
         pos &&
         createPortal(
           <span
-            className="pointer-events-none fixed z-[100] rounded-lg border border-f1-border bg-f1-950 p-2.5 text-[11px] font-normal normal-case leading-snug tracking-normal text-f1-text-dim shadow-xl"
+            aria-hidden="true"
+            className="pointer-events-none fixed z-[100] rounded-pr border border-pr-rule bg-pr-stage p-2.5 font-pr-body text-xs font-normal normal-case leading-snug tracking-normal text-pr-text-dim shadow-xl"
             style={{ top: pos.top, left: pos.left, width: WIDTH, transform: "translateY(-100%)" }}
           >
             {text}
