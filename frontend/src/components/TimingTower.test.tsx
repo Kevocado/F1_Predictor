@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { TimingTower } from "./TimingTower";
 import { api } from "../api/client";
 import type { SessionDriverPrediction } from "../types";
@@ -73,11 +80,11 @@ describe("TimingTower", () => {
     render(<TimingTower predictions={grid} sessionType="race" season={2026} round={5} />);
     const toggle = screen.getByRole("button", { name: /Max Verstappen/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(toggle);
+    await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("Grid position")).toBeInTheDocument();
-    await userEvent.click(toggle);
-    await userEvent.click(toggle);
+    await user.click(toggle);
+    await user.click(toggle);
     expect(explain).toHaveBeenCalledTimes(1);
   });
 });
@@ -94,11 +101,14 @@ describe("TimingTower explanations", () => {
           }),
     );
     render(<TimingTower predictions={grid} sessionType="race" season={2026} round={5} />);
-    await userEvent.click(screen.getByRole("button", { name: /Max Verstappen/ }));
-    await userEvent.click(screen.getByRole("button", { name: /Lando Norris/ }));
+    await user.click(screen.getByRole("button", { name: /Max Verstappen/ }));
+    await user.click(screen.getByRole("button", { name: /Lando Norris/ }));
     expect(await screen.findByText("Qualifying position")).toBeInTheDocument();
-    failA(new Error("boom"));
-    await new Promise((r) => setTimeout(r, 0));
+    // Rejecting outside React's knowledge means the catch handler runs on a
+    // later microtask. act() flushes those deterministically; a raw
+    // setTimeout(0) flushed them by burning real time, which is what made
+    // this file time out on a loaded machine.
+    await act(async () => { failA(new Error("boom")); });
     expect(screen.getByText("Qualifying position")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

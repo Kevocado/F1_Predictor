@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import App from "./App";
 
 afterEach(() => vi.restoreAllMocks());
@@ -26,7 +33,7 @@ describe("App family frame", () => {
     expect(within(pages).getAllByRole("button").map((b) => b.textContent)).toEqual(["Races", "Championship", "Track record"]);
     expect(within(pages).getByRole("button", { name: "Races" })).toHaveAttribute("aria-current", "page");
 
-    await userEvent.click(within(pages).getByRole("button", { name: "Championship" }));
+    await user.click(within(pages).getByRole("button", { name: "Championship" }));
     expect(within(pages).getByRole("button", { name: "Championship" })).toHaveAttribute("aria-current", "page");
     // Hidden, not unmounted: switching back never refetches.
     expect(screen.getByTestId("page-races")).not.toBeVisible();

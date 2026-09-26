@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { SessionTimelinePanel } from "./SessionTimelinePanel";
 import { ApiError, api } from "../api/client";
 import type { RacePredictionResponse } from "../types";
@@ -47,7 +54,7 @@ describe("SessionTimelinePanel", () => {
     render(<SessionTimelinePanel {...props} />);
     const group = screen.getByRole("group", { name: "Session" });
     expect(within(group).getByRole("button", { name: "Race" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(within(group).getByRole("button", { name: "Qualifying" }));
+    await user.click(within(group).getByRole("button", { name: "Qualifying" }));
     expect(quali).toHaveBeenCalledWith("qualifying", 2026, 5);
   });
 
@@ -62,7 +69,7 @@ describe("SessionTimelinePanel", () => {
     const load = vi.spyOn(api, "racePrediction").mockRejectedValueOnce(new Error("boom")).mockResolvedValue(race("live"));
     render(<SessionTimelinePanel {...props} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load this prediction.");
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Max Verstappen")).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(2);
   });

@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { TrackRecordPage } from "./TrackRecordPage";
 import { api } from "../api/client";
 import type { RaceAccuracyEntry } from "../types";
@@ -54,7 +61,7 @@ describe("TrackRecordPage", () => {
     vi.spyOn(api, "raceAccuracy").mockResolvedValue([]);
     render(<TrackRecordPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load the track record.");
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText(/No resolved predictions yet/)).toBeInTheDocument();
   });
 });
