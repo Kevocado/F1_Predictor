@@ -125,8 +125,12 @@ def api(monkeypatch):
     monkeypatch.setattr(facts_mod, "_stored_rows", lambda season, rnd, session, tier=None: _stored())
     monkeypatch.setattr(facts_mod, "_contributors_for", lambda season, rnd, session: _contributors())
     monkeypatch.setattr(
-        facts_mod.store, "get_session_track_record",
-        lambda season=None, session_type=None: {"n_resolved": 40, "n_correct": 24, "pct_correct": 0.6},
+        facts_mod.store, "get_session_accuracy",
+        lambda session_type=None, tier=None: [
+            {"season": 2026, "round": 10, "rebuilt": False, "win_hits": 1, "win_of": 1},
+            {"season": 2026, "round": 11, "rebuilt": False, "win_hits": 0, "win_of": 1},
+            {"season": 2026, "round": 12, "rebuilt": True, "win_hits": 1, "win_of": 1},
+        ],
     )
     return TestClient(app)
 
@@ -232,7 +236,76 @@ def test_the_biggest_mover_gets_contributors_even_outside_the_top_three(api, mon
 def test_record_reports_pre_session_hits(api):
     body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
 
-    assert body["record"] == {"label": "Picks made before the session", "hits": 24, "settled": 40}
+    # The real store returns per-session accuracy rows, not a hit count: two
+    # tracked sessions, one of which the top win pick landed on. The rebuilt
+    # session is excluded, so hits=1 settled=2 — never 0/240, and never
+    # counting every driver x market row as a separate "pick".
+    assert body["record"] == {"label": "Picks made before the session", "hits": 1, "settled": 2}
+
+
+def test_record_is_none_when_no_tracked_session_exists(api, monkeypatch):
+    monkeypatch.setattr(facts_mod.store, "get_session_accuracy", lambda session_type=None, tier=None: [])
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+
+    assert body["record"] is None
+
+
+def test_started_session_status_falls_back_to_the_stored_session_time(api, monkeypatch):
+    # The prediction is unavailable, but the stored rows know when the session
+    # ran. A finished race must never be advertised as 'upcoming'.
+    rows = _stored(snapshotted_at="2026-09-01T10:00:00Z", session_time="2026-09-01T14:00:00Z")
+    for row in rows:
+        row["resolved"] = 1
+        row["actual_outcome"] = 1 if row["driver_id"] == "ver_1" else 0
+    monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: None)
+    monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: rows)
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+
+    assert body["status"] == "final"
+    assert "pick_won" in body["result"]
+
+
+def test_started_session_contributors_are_not_rebuilt_from_today(api, monkeypatch):
+    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    stored = _stored(snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z")
+    monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
+    monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: stored)
+    monkeypatch.setattr(facts_mod, "_contributors_for", lambda s, r, x: _contributors())
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+
+    # A completed session's explanation may not be rebuilt from today's model.
+    assert all("contributors" not in d for d in body["drivers"])
+
+
+def test_upcoming_session_with_no_stored_rows_is_pre_kickoff_not_rebuilt(api, monkeypatch):
+    # A live forecast for a session that has not happened yet is genuinely made
+    # before the session: announcing it as 'rebuilt' would be a false claim.
+    monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: [])
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+
+    assert body["status"] == "upcoming"
+    assert body["pick_timing"] == "pre_kickoff"
+
+
+def test_started_session_markets_come_from_the_stored_record(api, monkeypatch):
+    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    stored = _stored(
+        drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
+        snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
+    )
+    monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
+    monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: stored)
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+    win = next(m for m in body["markets"] if m["market"] == "win")
+
+    # The stored chances, not today's 0.31 / 0.27.
+    assert win["model"]["Lando Norris"] == pytest.approx(0.44)
+    assert win["model"]["Max Verstappen"] == pytest.approx(0.30)
 
 
 # --- pick_timing --------------------------------------------------------
@@ -265,7 +338,11 @@ def test_pick_timing_is_rebuilt_for_a_backtest_source(api, monkeypatch):
     assert body["pick_timing"] == "rebuilt"
 
 
-def test_pick_timing_is_rebuilt_when_the_stored_snapshot_was_taken_late(api, monkeypatch):
+def test_upcoming_session_shows_the_live_forecast_not_the_late_stored_one(api, monkeypatch):
+    # A stored snapshot written after the session is not a valid pre-session
+    # record, but this session has not happened yet: the pick shown is the
+    # live forecast, which genuinely was made before it. Calling that 'rebuilt'
+    # would be a false claim about a number that was never rebuilt.
     monkeypatch.setattr(
         facts_mod, "_stored_rows",
         lambda s, r, x, tier=None: _stored(snapshotted_at="2026-09-13T15:00:00Z"),  # after the session
@@ -274,7 +351,9 @@ def test_pick_timing_is_rebuilt_when_the_stored_snapshot_was_taken_late(api, mon
 
     body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
 
-    assert body["pick_timing"] == "rebuilt"
+    assert body["status"] == "upcoming"
+    assert body["pick_timing"] == "pre_kickoff"
+    assert body["pick"] == {"label": "Max Verstappen", "prob": 0.31}  # the live forecast
 
 
 # --- THE RULE: a started session uses the stored pre-session record -------
