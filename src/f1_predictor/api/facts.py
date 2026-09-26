@@ -453,7 +453,9 @@ def get_facts(session_id: str) -> dict:
     if pick is None:
         pick_timing = "none"
 
-    contributors = _contributors_for(season, round_, session) if (pick_timing != "none") else {}
+    # Contributors are computed now, on the current feature frame; nothing
+    # stored them before the session, so a started session quotes none.
+    contributors = _contributors_for(season, round_, session) if (pick_timing != "none" and not started) else {}
     result = _result(stored_rows, names, status, pick_timing, pick["label"] if pick else None)
     if pick_timing == "rebuilt" and result:
         result.pop("pick_won", None)

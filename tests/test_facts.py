@@ -389,3 +389,24 @@ def test_unknown_session_is_404(api, monkeypatch):
     monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: [])
 
     assert api.get("/facts/1999-1-race").status_code == 404
+
+
+def test_started_session_quotes_no_contributors_computed_after_it_began(api, monkeypatch):
+    # Contributors come from the explain machinery run NOW on the current
+    # feature frame; nothing stored them before the session, so a started
+    # session must not present them as the reason for the pre-session pick.
+    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    stored = _stored(
+        drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
+        snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
+    )
+    calls = []
+    monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
+    monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: stored)
+    monkeypatch.setattr(facts_mod, "_contributors_for", lambda s, r, x: calls.append(1) or _contributors())
+
+    body = api.get(f"/facts/{SEASON}-{ROUND}-race").json()
+
+    assert body["status"] in ("live", "final")  # started either way
+    assert all("contributors" not in d for d in body["drivers"])
+    assert calls == []  # not even computed
