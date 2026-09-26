@@ -226,9 +226,42 @@ def _stored_by_driver(rows: list[dict]) -> dict[str, dict]:
     return out
 
 
+def _driver_rows(prediction: dict | None) -> list[dict]:
+    """The per-driver list, whichever name the payload gave it.
+
+    The routes return `RacePredictionResponse` / `SessionPredictionResponse`,
+    whose per-driver list is `predictions` and whose fields are `p_win`,
+    `p_podium`, `p_points_finish` and `p_dnf`. An older cached snapshot used
+    `drivers` with `win`/`podium`/`points`/`dnf`.
+
+    This module originally read `drivers`/`win` unconditionally, so it read
+    NOTHING from a real response: the panel reported "no pick yet" for a race
+    the model had a 31% pick for. Normalising here — once, at the boundary —
+    means every reader below keeps one vocabulary.
+
+    `expected_position` is deliberately NOT mapped to `grid`. It is a
+    Monte-Carlo mean finishing order (a model output, and fractional: 1.4, 3.9),
+    not a grid slot, and the spec ties the race narrative to the grid.
+    """
+    if not prediction:
+        return []
+    rows = prediction.get("predictions")
+    if rows is None:
+        rows = prediction.get("drivers") or []
+    aliases = {"win": "p_win", "podium": "p_podium", "points": "p_points_finish", "dnf": "p_dnf"}
+    out = []
+    for row in rows:
+        mapped = dict(row)
+        for short, real in aliases.items():
+            if mapped.get(short) is None and mapped.get(real) is not None:
+                mapped[short] = mapped[real]
+        out.append(mapped)
+    return out
+
+
 def _name_by_driver(prediction: dict) -> dict[str, str]:
     names = {}
-    for d in prediction.get("drivers") or []:
+    for d in _driver_rows(prediction):
         driver_id = d.get("driver_id")
         if driver_id is not None:
             names[str(driver_id)] = d.get("name") or str(driver_id)
@@ -262,7 +295,7 @@ def _markets(prediction: dict | None, stored: dict[str, dict], names: dict[str, 
     if prediction is None and not stored:
         return []
     source = stored or {}
-    drivers = prediction.get("drivers") or [] if prediction else []
+    drivers = _driver_rows(prediction)
     by_id = {str(d.get("driver_id")): d for d in drivers}
 
     def field(market: str, key: str) -> dict:
@@ -299,7 +332,7 @@ def _drivers(
     and grid); quoting today's post-session podium/points/DNF would be
     hindsight. Contributors are attached to the top three plus the biggest
     mover — the largest gap between grid position and predicted rank."""
-    by_id = {str(d.get("driver_id")): d for d in (prediction or {}).get("drivers") or []}
+    by_id = {str(d.get("driver_id")): d for d in _driver_rows(prediction)}
     rows = []
     for driver_id in set(by_id) | set(stored):
         current = by_id.get(driver_id, {})
@@ -478,7 +511,7 @@ def get_facts(session_id: str) -> dict:
     elif prediction is not None:
         # An upcoming session shows the live forecast, and the label describes
         # the live forecast — never the stored record's.
-        drivers = [d for d in (prediction.get("drivers") or []) if _num(d.get(headline_key)) is not None]
+        drivers = [d for d in _driver_rows(prediction) if _num(d.get(headline_key)) is not None]
         drivers.sort(key=lambda d: -_num(d[headline_key]))
         if drivers:
             pick = {"label": drivers[0].get("name"), "prob": _num(drivers[0][headline_key])}
