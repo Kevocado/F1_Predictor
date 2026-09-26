@@ -155,7 +155,7 @@ def _contributors_for(season: int, round_: int, session: str) -> dict[str, list[
             {
                 "label": _label(item.get("feature")),
                 "value": item.get("value"),
-                "direction": "raises" if _num(item.get("contribution")) >= 0 else "lowers",
+                "direction": "raises" if (_num(item.get("contribution")) or 0.0) >= 0 else "lowers",
             }
             for item in items
         ]
@@ -195,11 +195,18 @@ def _upcoming_sessions() -> list[dict]:
 def _status(prediction: dict | None, now: datetime, stored_rows: list[dict] | None = None) -> str:
     """A session that has begun and whose stored rows are all resolved is a
     final; one that has begun without resolved rows is still 'live'. Nothing
-    is called final before it has actually happened."""
+    is called final before it has actually happened.
+
+    The start time falls back to the stored rows' own session_time: when the
+    live prediction is unavailable (jolpica down, unknown round) the stored
+    record still knows when the session ran, and a finished race must never be
+    advertised as 'upcoming'."""
+    rows = stored_rows or []
     when = _as_utc((prediction or {}).get("session_time"))
+    if when is None and rows:
+        when = _as_utc(rows[0].get("session_time"))
     if when is None or when > now:
         return "upcoming"
-    rows = stored_rows or []
     if rows and all(bool(row.get("resolved")) for row in rows):
         return "final"
     return "live"
@@ -228,13 +235,23 @@ def _name_by_driver(prediction: dict) -> dict[str, str]:
     return names
 
 
-def _pick_timing(prediction: dict | None, stored_tracked: bool) -> str:
-    if prediction is None and not stored_tracked:
-        return "none"
-    source = (prediction or {}).get("source")
-    if source in ("rebuilt", "backtest"):
-        return "rebuilt"
-    if not stored_tracked:
+def _pick_timing(prediction: dict | None, stored_rows: list[dict], stored_tracked: bool, started: bool) -> str:
+    """How honest the pick's timing is — always about the SAME source the pick
+    number came from, so a number is never labelled with another source's
+    timing.
+
+    * STARTED: the pick came from the stored record. No stored record at all ->
+      'none' (there is no pick to time). A record written at/after the session
+      -> 'rebuilt': shown, never judged. Tracked -> 'pre_kickoff'.
+    * UPCOMING: the pick is a live forecast, made before the session by
+      definition, so it is 'pre_kickoff' unless the source itself is labelled
+      'rebuilt' or 'backtest'.
+    """
+    if started:
+        if not stored_rows:
+            return "none"
+        return "pre_kickoff" if stored_tracked else "rebuilt"
+    if (prediction or {}).get("source") in ("rebuilt", "backtest"):
         return "rebuilt"
     return "pre_kickoff"
 
@@ -346,17 +363,27 @@ def _context(prediction: dict | None) -> dict:
 
 
 def _record() -> dict | None:
+    """How the model's own headline pick has done, over sessions where it was
+    made BEFORE the session.
+
+    Built from store.get_session_accuracy(), which already applies the
+    pre-session rule and returns one row per session with `win_hits` (how many
+    of the model's top-N win picks actually landed) and `rebuilt`. Counting
+    sessions (not driver x market rows) is what makes this a *pick* record
+    rather than a per-driver probability tally.
+    """
     try:
-        data = store.get_session_track_record() or {}
+        rows = store.get_session_accuracy() or []
     except Exception:
+        logger.info("session track record unavailable")
         return None
-    settled = int(data.get("n_resolved") or 0)
-    if settled <= 0:
+    tracked = [r for r in rows if not r.get("rebuilt")]
+    if not tracked:
         return None
     return {
         "label": "Picks made before the session",
-        "hits": int(data.get("n_correct") or 0),
-        "settled": settled,
+        "hits": int(sum(int(r.get("win_hits") or 0) for r in tracked)),
+        "settled": len(tracked),
     }
 
 
@@ -438,24 +465,30 @@ def get_facts(session_id: str) -> dict:
     for driver_id in stored:
         names.setdefault(driver_id, driver_id)
 
-    pick_timing = _pick_timing(source_source, stored_tracked)
+    pick_timing = _pick_timing(prediction, stored_rows, stored_tracked, started)
     headline_key = _HEADLINE_KEY[session]
     pick = None
-    for driver_id, entry in sorted(stored.items(), key=lambda kv: -(kv[1].get("win") or 0)):
-        if entry.get("win") is not None:
-            pick = {"label": names.get(driver_id, driver_id), "prob": entry["win"]}
-            break
-    if pick is None and source and not started:
-        drivers = [d for d in (source.get("drivers") or []) if _num(d.get(headline_key)) is not None]
+    if started:
+        # The pick came from the stored pre-session record, and its timing
+        # label describes that same record.
+        for driver_id, entry in sorted(stored.items(), key=lambda kv: -(kv[1].get("win") or 0)):
+            if entry.get("win") is not None:
+                pick = {"label": names.get(driver_id, driver_id), "prob": entry["win"]}
+                break
+    elif prediction is not None:
+        # An upcoming session shows the live forecast, and the label describes
+        # the live forecast — never the stored record's.
+        drivers = [d for d in (prediction.get("drivers") or []) if _num(d.get(headline_key)) is not None]
         drivers.sort(key=lambda d: -_num(d[headline_key]))
         if drivers:
             pick = {"label": drivers[0].get("name"), "prob": _num(drivers[0][headline_key])}
     if pick is None:
         pick_timing = "none"
 
-    # Contributors are computed now, on the current feature frame; nothing
-    # stored them before the session, so a started session quotes none.
-    contributors = _contributors_for(season, round_, session) if (pick_timing != "none" and not started) else {}
+    # Contributors explain a *forecast*; for a finished session today's model
+    # would explain it with the result already in its features, so they are
+    # not rebuilt there.
+    contributors = _contributors_for(season, round_, session) if (pick_timing == "pre_kickoff" and not started) else {}
     result = _result(stored_rows, names, status, pick_timing, pick["label"] if pick else None)
     if pick_timing == "rebuilt" and result:
         result.pop("pick_won", None)
