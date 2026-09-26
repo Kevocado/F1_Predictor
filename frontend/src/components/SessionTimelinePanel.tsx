@@ -4,6 +4,7 @@ import type { DriverPrediction, SessionDriverPrediction, SessionType } from "../
 import { EmptyState, ErrorState, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
 import { TierBadge } from "./TierBadge";
 import { TimingTower } from "./TimingTower";
+import { SessionSummaryPanel } from "./SessionSummaryPanel";
 
 const ALL_SESSIONS: { key: SessionType; label: string }[] = [
   { key: "sprint_qualifying", label: "Sprint quali" },
@@ -146,7 +147,15 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
       {error === "failed" && (
         <ErrorState message="We couldn't load this prediction. Check your connection and try again." onRetry={() => setReloadKey((k) => k + 1)} />
       )}
-      {data && !error && <TimingTower predictions={data.predictions} season={season} round={round} sessionType={selected} />}
+      {data && !error && (
+        <>
+          {/* In plain English, above the timing tower: the one-line answer
+              before the grid. Collapsed to its headline, because a race page
+              is already dense. Fetches on its own and never gates the tower. */}
+          <SessionSummaryPanel sessionId={`${season}-${round}-${selected}`} fetcher={api.summary} className="mb-4" />
+          <TimingTower predictions={data.predictions} season={season} round={round} sessionType={selected} />
+        </>
+      )}
     </section>
   );
 }
