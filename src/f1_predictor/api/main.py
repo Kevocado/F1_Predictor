@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECONDS
 from .facts import router as facts_router
+from .explain import router as explain_router
 from .routes import refresh_public_snapshot_from_remote, router
 
 
@@ -70,6 +71,12 @@ app.include_router(router)
 # router carries no /api prefix. /facts/upcoming is declared before
 # /facts/{session_id} inside facts.py so it isn't swallowed by the path param.
 app.include_router(facts_router)
+# The browser's route to the plain-English summary. Caddy only reverse-proxies
+# this app, so the explainer is reached through here rather than directly.
+# Registered before the static mount below for the same reason as
+# facts_router: the catch-all file handler would otherwise answer
+# /api/explain/* with index.html and a 200.
+app.include_router(explain_router)
 
 # Only present in the public Docker deployment (see repo-root Dockerfile),
 # which builds frontend/dist before starting the server — local dev never

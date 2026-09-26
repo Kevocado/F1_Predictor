@@ -1,18 +1,20 @@
 {
-  "source": "predictor-ui@797bbd0ef9a8",
+  "source": "predictor-ui@5dbb8f5982bd",
   "files": {
-    "components/AppFrame.tsx": "f7ecde25aa293b4b782ef293508e1b24641fb41815df148404d05b848e76c059",
-    "components/MatchCard.tsx": "dc5a2453e192ea12aacfdbbc67fea5de43ee6808dd92ae2ceb4c973917f1b291",
-    "components/ProbabilityBar.tsx": "62803f21e7e46d54bc9a8655994dedeb015387de1ae26d591e7ddcc72bf30d9e",
-    "components/RoundNavigator.tsx": "5d470a84b3c3db8dbe68581838341ee4c6938952d82d39a811458c72d943064f",
-    "components/StatTile.tsx": "2624ff94759c263f8c427f3e7b868534649b37a8a02d444c39da062168c22154",
-    "components/States.tsx": "0efd9f30c4ae2e310d2394d312b4c8f1ffc3a9cbcfb83f9a6f24eebf01c71345",
-    "components/StatusBadge.tsx": "e4ce2e43b356b569c4600e23c3b444af8e3f65932fb90749bf09a1cfe8482585",
-    "components/TeamChip.tsx": "d628f3d101d5d153f43ac2f43be6efe2f55a215c58626c6cd92abdfb7f80d0c6",
-    "contrast.ts": "aae3a7d06e0882aa7c5f0e8205301526662e3c74e023026f1c1b2e47f3fb75bc",
-    "fmt.ts": "9cd25d4b7fdf7e848ca501fc4db205eb39209f156622009da98e4549bd1cd96b",
-    "fonts.css": "1bc3ed0c4d8a93f18ae8fe0b723dd7a854581cdcbf7dea6d30acd98ae4135c80",
-    "index.ts": "933b8b61fc042a5335c4d9974168971cffa7c06bd26925a99092f98c5f344b11",
-    "tokens.css": "0b15511a8df2005c993612b6bb99f6a42e270ac49fc7ad69872b0053fac1472f"
+    "components/AppFrame.tsx": "cd58cc6dd6403cdb214cd871bcaad0734cabcb88e70bf4502dd37fcb2c4077f7",
+    "components/ExplainerPanel.tsx": "8dc499c085876d55396a2ed5fe0aef8b5cac4369034bd940621a3b385b55f3e2",
+    "components/MatchCard.tsx": "aee3906fa6aeb0fdf2853b8555c440360450ed0e6914295c0404053af9a88798",
+    "components/ProbabilityBar.tsx": "d402c2419b7ca9449a8c457921ed937bfe8b6fb476211b743b2621471bd9314f",
+    "components/RoundNavigator.tsx": "b75bca22a406a1d277619d3b8e15e092ff268483a2e6ed72ca831645ce1eb1c7",
+    "components/StatTable.tsx": "ced4924cecfa98cf067663d742b434ec4a457f646dd3a89ee5c7d232cf221cbc",
+    "components/StatTile.tsx": "e89404263396f56110a1898292a5279b39b4543b0d9b7c01049d6e8172dd5857",
+    "components/States.tsx": "bf1af7a5a89f54063e6df30067c4649483ee562ac3a7914a47048207e1e6cd9b",
+    "components/StatusBadge.tsx": "2d84fb26891e08213ae50c3aa927f2b27d50fe1094243ac502306bf95dca87d7",
+    "components/TeamChip.tsx": "6da72ceb59f6f974b978d1786b3f45b9bb220534ba79e2e76c413eb48bcedba6",
+    "contrast.ts": "f1c88e5beefe3bfff2c8f231a8e1009c1937e612a564fe0ebf0648fb3e502f87",
+    "fmt.ts": "a65f6a8dcb266eeaeefac42fdd21dac88c656e38306513a6dd90f08a1ed13cd8",
+    "fonts.css": "15123904f20c44c218fff94eb45995282aa1e635adbedc703b58e1238a2c4cd5",
+    "index.ts": "bdd37e914e3e182ab069273ede219777457090ba3bd6d065b582e9b2916aa542",
+    "tokens.css": "6a1e465e82ba13f29eba1061897fd170edf2a81f1af3fd4488fe55157ff9b3fd"
   }
 }
