@@ -211,14 +211,58 @@ def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tup
     return sim, tier
 
 
+def _tracked_or_rebuilt(rows: list[dict]) -> str:
+    """'tracked' only when every stored row was snapshotted before the
+    session started; a snapshot written afterwards is 'rebuilt'."""
+    pre = all(store.made_before_session(r["snapshotted_at"], r["session_time"]) for r in rows)
+    return "tracked" if pre else "rebuilt"
+
+
+def _best_snapshot(season: int, round_: int, session_type: str, preferred_tier: str) -> tuple[list[dict], str, str] | None:
+    """The stored snapshot to serve for a completed session, with its tier
+    and source. The latest tier whose snapshot was made before the session
+    wins ('tracked') -- the cron can miss the last pre-session window, and an
+    earlier honest snapshot beats a late one. With none made in time, the
+    stored rows are served labelled 'rebuilt'. None when nothing was stored."""
+    rows = store.get_session_prediction(season, round_, session_type)
+    if not rows:
+        return None
+    by_tier: dict[str, list[dict]] = {}
+    for r in rows:
+        by_tier.setdefault(r["tier"], []).append(r)
+    order = {t: i for i, t in enumerate(session_state.SESSION_TIER_ORDER)}
+    honest = [t for t, tier_rows in by_tier.items() if _tracked_or_rebuilt(tier_rows) == "tracked"]
+    if honest:
+        tier = max(honest, key=lambda t: order.get(t, -1))
+        return by_tier[tier], tier, "tracked"
+    tier = preferred_tier if preferred_tier in by_tier else max(by_tier, key=lambda t: order.get(t, -1))
+    return by_tier[tier], tier, "rebuilt"
+
+
+def honest_source(season: int, round_: int, session_type: str, prediction: dict) -> dict:
+    """A stored prediction keeps its numbers but never a stale label: it is
+    'tracked' only if its snapshot was written before its session. Applied
+    to precomputed public snapshots, which may predate this rule."""
+    if prediction.get("source") != "tracked":
+        return prediction
+    rows = store.get_session_prediction(season, round_, session_type, tier=prediction.get("tier"))
+    # Fail closed: a 'tracked' label nothing in the tracking DB can back up
+    # (e.g. the DB shipped with the image predates the polled snapshot) is
+    # not trusted.
+    if not rows or _tracked_or_rebuilt(rows) == "rebuilt":
+        prediction = {**prediction, "source": "rebuilt"}
+    return prediction
+
+
 def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, str, str]:
     """A race that's already happened: prefer the honest snapshot recorded
     in tracking/store.py *before* it happened; fall back to an on-demand
     no-lookahead reconstruction (evaluate/backtest.py) if nothing was ever
     snapshotted — same "backfilled" gap PL_Predictor's tracking store
     handles explicitly rather than silently."""
-    tracked = store.get_session_prediction(season, round_, "race", tier=session_state.TIER_POST_QUALIFYING)
-    if tracked:
+    best = _best_snapshot(season, round_, "race", session_state.TIER_POST_QUALIFYING)
+    if best:
+        tracked, tier, source = best
         df = pd.DataFrame(tracked)
         # Pivot on driver_id alone (not also constructor_id) — a NULL
         # constructor_id (an older snapshot recorded before backtest_race
@@ -234,7 +278,7 @@ def _completed_race_prediction(season: int, round_: int) -> tuple[pd.DataFrame, 
         pivot = pivot.merge(extra, on="driver_id", how="left")
         pivot["expected_position"] = float("nan")
         pivot["expected_points"] = float("nan")
-        return pivot, session_state.TIER_POST_QUALIFYING, "tracked"
+        return pivot, tier, source
 
     result = backtest_lib.backtest_race(season, round_)
     result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
@@ -327,8 +371,9 @@ def _predict_upcoming_session(season: int, round_: int, race_row: pd.Series, ses
 
 def _completed_session_prediction(season: int, round_: int, session_type: str) -> tuple[pd.DataFrame, str, str]:
     spec = session_outcome.SESSION_SPECS[session_type]
-    tracked = store.get_session_prediction(season, round_, session_type, tier=spec.feature_cutoff_tier)
-    if tracked:
+    best = _best_snapshot(season, round_, session_type, spec.feature_cutoff_tier)
+    if best:
+        tracked, tier, source = best
         df = pd.DataFrame(tracked)
         pivot = df.pivot_table(index="driver_id", columns="market", values="predicted_prob", aggfunc="first").reset_index()
         market_spec = store.SESSION_MARKET_SPEC[session_type]
@@ -340,7 +385,7 @@ def _completed_session_prediction(season: int, round_: int, session_type: str) -
         pivot = pivot.merge(extra, on="driver_id", how="left")
         if "expected_position" not in pivot.columns:
             pivot["expected_position"] = float("nan")
-        return pivot, spec.feature_cutoff_tier, "tracked"
+        return pivot, tier, source
 
     result = backtest_lib.backtest_session(season, round_, session_type=session_type)
     result = result.rename(columns={"position": "actual_position", "dnf": "actual_dnf"})
@@ -363,7 +408,7 @@ def _get_session_prediction_response(season: int, round_: int, session_type: str
         if snap is not None:
             pred = snap.get("session_predictions", {}).get(session_type, {}).get(str(round_))
             if pred is not None:
-                return pred
+                return honest_source(season, round_, session_type, pred)
     return _get_session_prediction_live(season, round_, session_type)
 
 
@@ -523,7 +568,7 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
         if snap is not None:
             pred = snap["predictions"].get(str(round_))
             if pred is not None:
-                return pred
+                return honest_source(season, round_, "race", pred)
     return _get_race_prediction_live(season, round_)
 
 
@@ -670,7 +715,11 @@ def _get_championship_live(championship: str, season: int, n_trials: int) -> Cha
 def get_track_record(tier: str | None = None, session_type: str | None = None) -> TrackRecordResponse:
     result = store.get_session_track_record(session_type=session_type, tier=tier)
     by_market = [{k: v for k, v in row.items() if k != "session_type"} for row in result["by_market"]]
-    return TrackRecordResponse(n_resolved=result["n_resolved"], by_market=[TrackRecordEntry(**row) for row in by_market])
+    return TrackRecordResponse(
+        n_resolved=result["n_resolved"],
+        by_market=[TrackRecordEntry(**row) for row in by_market],
+        n_rebuilt_sessions=result.get("n_rebuilt_sessions", 0),
+    )
 
 
 @router.get("/track-record/by-race", response_model=list[RaceAccuracyEntry])

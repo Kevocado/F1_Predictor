@@ -97,7 +97,7 @@ def build_snapshot(previous: dict | None = None, season: int | None = None) -> d
             except Exception as exc:
                 print(f"    ! skipped race prediction for round {round_}: {exc}")
         else:
-            predictions[key] = previous_predictions[key]
+            predictions[key] = routes.honest_source(season, round_, "race", previous_predictions[key])
 
         for session_type in _session_types_for(race):
             if rebuild or key not in previous_session_predictions.get(session_type, {}):
@@ -108,7 +108,9 @@ def build_snapshot(previous: dict | None = None, season: int | None = None) -> d
                 except Exception as exc:
                     print(f"    ! skipped {session_type} prediction for round {round_}: {exc}")
             elif key in previous_session_predictions.get(session_type, {}):
-                session_predictions[session_type][key] = previous_session_predictions[session_type][key]
+                session_predictions[session_type][key] = routes.honest_source(
+                    season, round_, session_type, previous_session_predictions[session_type][key]
+                )
 
     print("Building championship projections...")
     championship = {}

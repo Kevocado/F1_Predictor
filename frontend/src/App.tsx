@@ -1,61 +1,33 @@
 import { useState } from "react";
+import { AppFrame } from "./predictor-ui";
+import { SITES } from "./lib/sites";
 import { RacesPage } from "./pages/RacesPage";
 import { ChampionshipPage } from "./pages/ChampionshipPage";
 import { TrackRecordPage } from "./pages/TrackRecordPage";
 
-type Tab = "races" | "championship" | "track-record";
+const TABS = [
+  { id: "races", label: "Races" },
+  { id: "championship", label: "Championship" },
+  { id: "track-record", label: "Track record" },
+];
 
 function App() {
-  const [tab, setTab] = useState<Tab>("races");
+  const [tab, setTab] = useState("races");
 
+  // All pages mount immediately and stay mounted, hidden rather than
+  // unmounted, so switching tabs never re-fetches data already loaded.
   return (
-    <div className="mx-auto min-h-screen max-w-6xl px-6 py-8">
-      <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="clip-corner flex h-10 w-10 items-center justify-center rounded-lg bg-f1-red font-display text-lg font-black text-white">
-            F1
-          </div>
-          <div>
-            <h1 className="font-display text-xl font-extrabold tracking-tight text-f1-text">F1 Predictor</h1>
-            <p className="text-xs text-f1-text-faint">Race outcomes &amp; championship projections</p>
-          </div>
-        </div>
-        <nav className="flex flex-wrap gap-1 rounded-lg border border-f1-border bg-f1-850/60 p-1">
-          {(
-            [
-              ["races", "Races"],
-              ["championship", "Championship"],
-              ["track-record", "Track Record"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition ${
-                tab === key ? "bg-f1-red text-white" : "text-f1-text-dim hover:text-f1-text"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      {/* All pages mount immediately and stay mounted, hidden with CSS
-          rather than unmounted, so switching tabs never re-fetches data
-          that's already loaded. */}
-      <main>
-        <div style={{ display: tab === "races" ? "block" : "none" }}>
-          <RacesPage />
-        </div>
-        <div style={{ display: tab === "championship" ? "block" : "none" }}>
-          <ChampionshipPage />
-        </div>
-        <div style={{ display: tab === "track-record" ? "block" : "none" }}>
-          <TrackRecordPage />
-        </div>
-      </main>
-    </div>
+    <AppFrame sport="f1" sportName="F1" sites={SITES} tabs={TABS} activeTab={tab} onTab={setTab}>
+      <div data-testid="page-races" hidden={tab !== "races"}>
+        <RacesPage />
+      </div>
+      <div data-testid="page-championship" hidden={tab !== "championship"}>
+        <ChampionshipPage />
+      </div>
+      <div data-testid="page-track-record" hidden={tab !== "track-record"}>
+        <TrackRecordPage />
+      </div>
+    </AppFrame>
   );
 }
 

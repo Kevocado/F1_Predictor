@@ -1,55 +1,111 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { RaceSummary } from "../types";
-import { RaceRow } from "../components/RaceRow";
+import { ErrorState, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
 import { SessionTimelinePanel } from "../components/SessionTimelinePanel";
+
+const day = (race: RaceSummary) => (race.race_datetime ? kickoff(race.race_datetime).split(" · ")[0] : "Date to be confirmed");
 
 export function RacesPage() {
   const [races, setRaces] = useState<RaceSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [selectedRound, setSelectedRound] = useState<number | null>(null);
 
   useEffect(() => {
+    setError(false);
     api
       .races()
       .then((data) => {
         setRaces(data);
-        // Default to the next upcoming race, or the most recent completed
-        // one if the season's over — whichever is most likely what
-        // someone opening this page actually wants to see first.
+        // Open on the next race, or the latest completed one once the
+        // season's over: what someone opening this page most likely wants.
         const nextUpcoming = data.find((r) => !r.completed);
         const fallback = [...data].reverse().find((r) => r.completed);
         setSelectedRound((nextUpcoming ?? fallback ?? data[0])?.round ?? null);
       })
-      .catch((e) => setError(e.message));
-  }, []);
+      .catch(() => setError(true));
+  }, [reloadKey]);
 
   const selected = useMemo(() => races?.find((r) => r.round === selectedRound) ?? null, [races, selectedRound]);
+  const nextRound = races?.find((r) => !r.completed)?.round;
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Late in the season the next race sits far down the list: bring the
+  // selected one into view (within the list only) when the season loads.
+  useEffect(() => {
+    // Scroll the list box itself; scrollIntoView could also scroll the page.
+    const list = listRef.current;
+    const current = list?.querySelector<HTMLElement>("[aria-current]");
+    if (list && current) list.scrollTop = current.offsetTop - list.clientHeight / 2 + current.offsetHeight / 2;
+  }, [races]);
 
   if (error) {
-    return <div className="rounded-lg border border-dnf/30 bg-dnf/10 p-4 text-sm text-dnf">{error}</div>;
+    return <ErrorState message="We couldn't load the season. Check your connection and try again." onRetry={() => setReloadKey((k) => k + 1)} />;
   }
-  if (!races) {
-    return <div className="animate-pulse text-sm text-f1-text-faint">Loading season…</div>;
-  }
+  if (!races) return <Skeleton label="Loading season…" />;
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
-      <div className="clip-corner-lg max-h-[75vh] overflow-y-auto rounded-lg border border-f1-border bg-f1-850/40 p-1.5">
-        {races.map((race) => (
-          <RaceRow
-            key={race.round}
-            race={race}
-            selected={race.round === selectedRound}
-            onClick={() => setSelectedRound(race.round)}
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_1fr] lg:gap-6">
+      <label className="flex flex-col gap-1 text-sm text-pr-text-dim lg:hidden">
+        Race
+        <select
+          value={selectedRound ?? ""}
+          onChange={(e) => setSelectedRound(Number(e.target.value))}
+          className="rounded-pr border border-pr-rule bg-pr-panel px-3 py-2 text-base text-pr-text"
+        >
+          {races.map((r) => (
+            <option key={r.round} value={r.round}>
+              R{r.round} · {r.race_name}
+              {r.round === nextRound ? " (next up)" : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <ul ref={listRef} aria-label="Races" className="relative hidden max-h-[75vh] overflow-y-auto rounded-pr border border-pr-rule bg-pr-panel p-1 lg:block">
+        {races.map((race) => {
+          const current = race.round === selectedRound;
+          return (
+            <li key={race.round}>
+              <button
+                type="button"
+                aria-current={current || undefined}
+                onClick={() => setSelectedRound(race.round)}
+                className={`flex w-full items-center justify-between gap-3 rounded-pr px-3 py-2.5 text-left transition-colors ${
+                  current ? "bg-pr-panel-2 ring-1 ring-inset ring-pr-accent" : "hover:bg-pr-panel-2"
+                }`}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="font-pr-display text-sm font-semibold tabular-nums text-pr-text-dim">R{race.round}</span>
+                    <span className="text-sm font-semibold leading-snug text-pr-text">{race.race_name}</span>
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-2 text-xs text-pr-text-dim">
+                    {day(race)}
+                    {race.is_sprint_weekend && <span className="font-semibold uppercase tracking-wide text-pr-lean">Sprint</span>}
+                    {race.completed && <span>· Completed</span>}
+                  </span>
+                </span>
+                {race.round === nextRound && (
+                  <span className="shrink-0">
+                    <StatusBadge status="next" />
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="min-w-0">
+        {selected && (
+          <SessionTimelinePanel
+            season={selected.season}
+            round={selected.round}
+            isSprintWeekend={selected.is_sprint_weekend}
+            raceDatetime={selected.race_datetime}
           />
-        ))}
-      </div>
-      <div>
-        {selected ? (
-          <SessionTimelinePanel season={selected.season} round={selected.round} isSprintWeekend={selected.is_sprint_weekend} />
-        ) : (
-          <div className="text-sm text-f1-text-faint">Select a race.</div>
         )}
       </div>
     </div>

@@ -19,13 +19,6 @@ export const TIER_DESCRIPTIONS: Record<string, string> = {
     "Computed after the sprint race, using its result as a real input.",
 };
 
-export const SOURCE_DESCRIPTIONS: Record<string, string> = {
-  live: "Computed fresh, right now, from the latest available data.",
-  tracked: "Served from the snapshot recorded before this race happened — the honest, un-hindsight-biased prediction.",
-  backtest:
-    "This race happened before a snapshot was ever recorded, so this is an honest reconstruction: retrained using only data available before it, exactly as if predicted live.",
-};
-
 export const MARKET_LABELS: Record<string, string> = {
   win: "Win",
   podium: "Podium",

@@ -39,7 +39,10 @@ export interface ExplainResponse {
 }
 
 export type Tier = "pre_weekend" | "post_practice" | "post_qualifying";
-export type PredictionSource = "live" | "tracked" | "backtest";
+// "tracked": snapshotted before the session. "rebuilt": a stored snapshot
+// written after it. "backtest": a no-lookahead replay of a session that was
+// never snapshotted. Only "tracked" ever counts toward the track record.
+export type PredictionSource = "live" | "tracked" | "rebuilt" | "backtest";
 
 export interface RacePredictionResponse {
   season: number;
@@ -104,6 +107,8 @@ export interface TrackRecordEntry {
 export interface TrackRecordResponse {
   n_resolved: number;
   by_market: TrackRecordEntry[];
+  /** Sessions whose only snapshot was written after they ran: left out. */
+  n_rebuilt_sessions?: number;
 }
 
 export interface RaceAccuracyEntry {
@@ -111,6 +116,8 @@ export interface RaceAccuracyEntry {
   round: number;
   race_name: string;
   tier: string;
+  /** Snapshot written after the session ran: shown, never counted. */
+  rebuilt: boolean;
   win_predicted: string[];
   win_actual: string[];
   win_hits: number;

@@ -2,91 +2,104 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { RaceAccuracyEntry, TrackRecordResponse } from "../types";
 import { MARKET_LABELS, TIER_LABELS } from "../lib/glossary";
-import { pct } from "../lib/format";
+import { ErrorState, Skeleton, StatTile, pct, pctFine, record } from "../predictor-ui";
 import { RaceAccuracyTable } from "../components/RaceAccuracyTable";
+
+const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
 export function TrackRecordPage() {
   const [data, setData] = useState<TrackRecordResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [accuracy, setAccuracy] = useState<RaceAccuracyEntry[] | null>(null);
-  const [accuracyError, setAccuracyError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    // session_type="race" preserves current (pre-session-predictors) behavior:
-    // without it, race and the new qualifying/sprint/sprint-qualifying
-    // tracked predictions would mix together in this one view.
-    api.trackRecord(undefined, "race").then(setData).catch((e) => setError(e.message));
-    api
-      .raceAccuracy("post_qualifying", "race")
-      .then(setAccuracy)
-      .catch((e) => setAccuracyError(e.message));
-  }, []);
+    setError(false);
+    setData(null);
+    setAccuracy(null);
+    // session_type="race" keeps race predictions apart from the qualifying
+    // and sprint snapshots stored alongside them.
+    Promise.all([api.trackRecord(undefined, "race"), api.raceAccuracy("post_qualifying", "race")])
+      .then(([record, byRace]) => {
+        setData(record);
+        setAccuracy(byRace);
+      })
+      .catch(() => setError(true));
+  }, [reloadKey]);
 
-  const grouped = data
-    ? data.by_market.reduce<Record<string, typeof data.by_market>>((acc, row) => {
-        (acc[row.tier] ??= []).push(row);
-        return acc;
-      }, {})
-    : {};
+  if (error) {
+    return <ErrorState message="We couldn't load the track record. Check your connection and try again." onRetry={() => setReloadKey((k) => k + 1)} />;
+  }
+  if (!data || !accuracy) return <Skeleton label="Loading track record…" />;
 
-  const seasonSummary = accuracy?.length
-    ? {
-        winHits: accuracy.reduce((sum, r) => sum + Math.min(r.win_hits, r.win_of), 0),
-        winOf: accuracy.reduce((sum, r) => sum + r.win_of, 0),
-        podiumHits: accuracy.reduce((sum, r) => sum + r.podium_hits, 0),
-        podiumOf: accuracy.reduce((sum, r) => sum + r.podium_of, 0),
-        pointsHits: accuracy.reduce((sum, r) => sum + r.points_finish_hits, 0),
-        pointsOf: accuracy.reduce((sum, r) => sum + r.points_finish_of, 0),
-      }
-    : null;
+  const grouped = data.by_market.reduce<Record<string, TrackRecordResponse["by_market"]>>((acc, row) => {
+    (acc[row.tier] ??= []).push(row);
+    return acc;
+  }, {});
+  const rebuilt = data.n_rebuilt_sessions ?? 0;
+
+  // Summary tiles judge only sessions snapshotted before they ran.
+  const counted = accuracy.filter((r) => !r.rebuilt);
+  const sum = (f: (r: RaceAccuracyEntry) => number) => counted.reduce((n, r) => n + f(r), 0);
+  const podiumOf = sum((r) => r.podium_of);
+  const pointsOf = sum((r) => r.points_finish_of);
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="clip-corner-lg rounded-lg border border-f1-border bg-f1-850/60 p-5">
-        <div className="mb-4">
-          <h2 className="font-display text-lg font-bold text-f1-text">Track Record</h2>
-          <p className="max-w-2xl text-xs text-f1-text-faint">
-            There's no odds market for Formula 1 to compare against, so this is the honest alternative: every
-            prediction is snapshotted before the race happens and reconciled against what actually happened.
-            Brier score (lower is better) and hit rate should improve tier by tier as more of the weekend's real
-            data becomes available.
-          </p>
-        </div>
+      <section className="rounded-pr border border-pr-rule bg-pr-panel p-4 sm:p-5">
+        <h2 className="font-pr-display text-2xl font-bold uppercase tracking-wide text-pr-text">Accuracy by race</h2>
+        <p className="mb-4 max-w-2xl text-sm text-pr-text-dim">
+          Only predictions snapshotted before the session count.
+          {rebuilt > 0 && ` ${plural(rebuilt, "session was", "sessions were")} rebuilt after they ran and are left out.`}
+          {" "}Each race compares the post-qualifying prediction with what happened: the predicted winner, and how many of the predicted top 3 and top 10 landed there.
+        </p>
 
-        {error && <div className="rounded-lg border border-dnf/30 bg-dnf/10 p-4 text-sm text-dnf">{error}</div>}
-        {!error && !data && <div className="animate-pulse text-sm text-f1-text-faint">Loading track record…</div>}
-        {data && data.n_resolved === 0 && (
-          <p className="py-6 text-center text-sm text-f1-text-faint">
-            No resolved predictions yet — snapshots accumulate as races complete.
-          </p>
+        {counted.length > 0 ? (
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <div data-testid="winners-called">
+              <StatTile label="Winners called" value={record(sum((r) => Math.min(r.win_hits, r.win_of)), sum((r) => r.win_of))} />
+            </div>
+            <StatTile label="Podium places called" value={podiumOf ? pct(sum((r) => r.podium_hits) / podiumOf) : "—"} />
+            <StatTile label="Points places called" value={pointsOf ? pct(sum((r) => r.points_finish_hits) / pointsOf) : "—"} />
+          </div>
+        ) : (
+          accuracy.length > 0 && (
+            <p className="mb-4 rounded-pr border border-pr-rule bg-pr-panel-2 px-3 py-2 text-sm text-pr-text">
+              No races have a prediction snapshotted before they ran yet. The record starts with the next race.
+            </p>
+          )
         )}
+        <RaceAccuracyTable entries={accuracy} />
+      </section>
 
+      <section className="rounded-pr border border-pr-rule bg-pr-panel p-4 sm:p-5">
+        <h2 className="font-pr-display text-2xl font-bold uppercase tracking-wide text-pr-text">Calibration by market</h2>
+        <p className="mb-4 max-w-2xl text-sm text-pr-text-dim">
+          There are no betting odds to compare F1 predictions against, so each snapshot is checked against the result. Brier score: lower is better, and 0 is perfect. Hit rate should track the average predicted chance.
+        </p>
+        {data.n_resolved === 0 && <p className="py-4 text-sm text-pr-text-dim">No resolved predictions yet. They appear as races snapshotted in time finish.</p>}
         {Object.entries(grouped).map(([tier, rows]) => (
           <div key={tier} className="mb-5 last:mb-0">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-f1-text-faint">
-              {TIER_LABELS[tier] ?? tier}
-            </h3>
+            <h3 className="mb-2 font-pr-display text-sm font-semibold uppercase tracking-wide text-pr-text-dim">{TIER_LABELS[tier] ?? tier}</h3>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[480px] border-collapse text-sm">
+              <table className="w-full min-w-[30rem] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-f1-border text-left text-[11px] uppercase tracking-wide text-f1-text-faint">
-                    <th className="py-2 pr-3 font-medium">Market</th>
-                    <th className="py-2 pr-3 font-medium text-right">N</th>
-                    <th className="py-2 pr-3 font-medium text-right">Brier</th>
-                    <th className="py-2 pr-3 font-medium text-right">Hit rate</th>
-                    <th className="py-2 pr-3 font-medium text-right">Avg. predicted</th>
+                  <tr className="border-b border-pr-rule text-left font-pr-display text-xs uppercase tracking-wide text-pr-text-dim">
+                    <th className="py-2 pr-3 font-semibold">Market</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Predictions</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Brier</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Hit rate</th>
+                    <th className="py-2 pr-3 text-right font-semibold">Avg. predicted</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row.market} className="border-b border-f1-border/60 last:border-0">
-                      <td className="py-2 pr-3 text-f1-text">{MARKET_LABELS[row.market] ?? row.market}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-f1-text-dim">{row.n}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-f1-text-dim">{row.brier.toFixed(4)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-f1-text-dim">{pct(row.hit_rate, 1)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-f1-text-dim">
-                        {pct(row.avg_predicted_prob, 1)}
-                      </td>
+                    <tr key={row.market} className="border-b border-pr-rule last:border-0">
+                      <td className="py-2 pr-3 text-pr-text">{MARKET_LABELS[row.market] ?? row.market}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{row.n.toLocaleString("en-US")}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{row.brier.toFixed(3)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{pctFine(row.hit_rate)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{pctFine(row.avg_predicted_prob)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -94,49 +107,7 @@ export function TrackRecordPage() {
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="clip-corner-lg rounded-lg border border-f1-border bg-f1-850/60 p-5">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-bold text-f1-text">Accuracy by Race</h2>
-            <p className="max-w-2xl text-xs text-f1-text-faint">
-              Did the post-qualifying prediction call the actual positions? Predicted winner vs. who actually won,
-              and how many of the predicted top-3/top-10 landed there.
-            </p>
-          </div>
-          {seasonSummary && (
-            <div className="flex gap-4 text-right text-xs text-f1-text-dim">
-              <div>
-                <div className="font-display text-lg font-bold text-f1-text">
-                  {seasonSummary.winHits}/{seasonSummary.winOf}
-                </div>
-                Winners called
-              </div>
-              <div>
-                <div className="font-display text-lg font-bold text-f1-text">
-                  {pct(seasonSummary.podiumHits / seasonSummary.podiumOf, 0)}
-                </div>
-                Podium hit rate
-              </div>
-              <div>
-                <div className="font-display text-lg font-bold text-f1-text">
-                  {pct(seasonSummary.pointsHits / seasonSummary.pointsOf, 0)}
-                </div>
-                Points hit rate
-              </div>
-            </div>
-          )}
-        </div>
-
-        {accuracyError && (
-          <div className="rounded-lg border border-dnf/30 bg-dnf/10 p-4 text-sm text-dnf">{accuracyError}</div>
-        )}
-        {!accuracyError && !accuracy && (
-          <div className="animate-pulse text-sm text-f1-text-faint">Loading race-by-race accuracy…</div>
-        )}
-        {accuracy && <RaceAccuracyTable entries={accuracy} />}
-      </div>
+      </section>
     </div>
   );
 }

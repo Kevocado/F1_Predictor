@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECONDS
+from .facts import router as facts_router
 from .routes import refresh_public_snapshot_from_remote, router
 
 
@@ -65,6 +66,10 @@ app.add_middleware(
 )
 
 app.include_router(router)
+# The explainer service calls {SPORT_API}/facts/{id} on the API root, so this
+# router carries no /api prefix. /facts/upcoming is declared before
+# /facts/{session_id} inside facts.py so it isn't swallowed by the path param.
+app.include_router(facts_router)
 
 # Only present in the public Docker deployment (see repo-root Dockerfile),
 # which builds frontend/dist before starting the server — local dev never

@@ -33,7 +33,7 @@ class RacePredictionResponse(BaseModel):
     round: int
     race_name: str
     tier: str
-    source: str  # "live" (computed fresh), "tracked" (served from tracking store), "backtest" (honest historical replay)
+    source: str  # "live" (computed fresh), "tracked" (snapshot made before the session), "rebuilt" (snapshot written after it), "backtest" (historical replay)
     predictions: list[DriverPrediction]
 
 
@@ -60,7 +60,7 @@ class SessionPredictionResponse(BaseModel):
     race_name: str
     session_type: str  # "sprint_qualifying" | "qualifying" | "sprint" | "race"
     tier: str
-    source: str  # "live" | "tracked" | "backtest"
+    source: str  # "live" | "tracked" | "rebuilt" | "backtest"
     predictions: list[SessionDriverPrediction]
 
 
@@ -91,6 +91,8 @@ class TrackRecordEntry(BaseModel):
 class TrackRecordResponse(BaseModel):
     n_resolved: int
     by_market: list[TrackRecordEntry]
+    # Sessions whose only snapshot was written after they started: left out.
+    n_rebuilt_sessions: int = 0
 
 
 class FeatureContribution(BaseModel):
@@ -113,6 +115,8 @@ class RaceAccuracyEntry(BaseModel):
     round: int
     race_name: str
     tier: str
+    # Snapshot written after the session started: shown, never counted.
+    rebuilt: bool = False
     win_predicted: list[str] = []
     win_actual: list[str] = []
     win_hits: int = 0
