@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { ChampionshipPage } from "./ChampionshipPage";
 import { api } from "../api/client";
 
@@ -29,7 +36,7 @@ describe("ChampionshipPage", () => {
     render(<ChampionshipPage />);
     const group = screen.getByRole("group", { name: "Championship" });
     expect(within(group).getByRole("button", { name: "Drivers" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(within(group).getByRole("button", { name: "Constructors" }));
+    await user.click(within(group).getByRole("button", { name: "Constructors" }));
     expect(load).toHaveBeenLastCalledWith("constructors");
   });
 
@@ -37,7 +44,7 @@ describe("ChampionshipPage", () => {
     vi.spyOn(api, "championship").mockRejectedValueOnce(new Error("x")).mockResolvedValue(projection);
     render(<ChampionshipPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load the championship projection.");
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Lando Norris")).toBeInTheDocument();
   });
 });

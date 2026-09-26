@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { SessionSummaryPanel } from "./SessionSummaryPanel";
 
 const explanation = {
@@ -31,7 +38,7 @@ describe("SessionSummaryPanel", () => {
     expect(screen.queryByText(explanation.sections[0].text)).not.toBeInTheDocument();
     const toggle = screen.getByRole("button", { name: "Read the race story" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await userEvent.click(toggle);
+    await user.click(toggle);
     expect(screen.getByText(explanation.sections[0].text)).toBeInTheDocument();
   });
 
@@ -48,7 +55,7 @@ describe("SessionSummaryPanel", () => {
     render(<SessionSummaryPanel sessionId="2026-12-race" fetcher={fetcher} />);
     const retry = await screen.findByRole("button", { name: "Try again" });
     fetcher.mockResolvedValue(explanation);
-    await userEvent.click(retry);
+    await user.click(retry);
     expect(await screen.findByText(explanation.headline)).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledTimes(2);
   });

@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+
+// userEvent.setup() rather than the direct userEvent.click(): the direct
+// API advances real timers between events, which timed this suite out on a
+// loaded machine (reproduced 0-for-12 with four concurrent vitest runs).
+// src/test/no-real-time.test.ts keeps the whole suite on setup().
+const user = userEvent.setup();
+
 import { RacesPage } from "./RacesPage";
 import { api } from "../api/client";
 import type { RaceSummary } from "../types";
@@ -25,7 +32,10 @@ describe("RacesPage", () => {
     expect(within(next).getByText("Next up")).toBeInTheDocument();
     expect(within(next).getByText("Sprint")).toBeInTheDocument();
     expect(within(list).getByRole("button", { name: /Australian Grand Prix/ })).toHaveTextContent("Completed");
-    expect(load).toHaveBeenCalledWith(2026, 2);
+    // The prediction is fetched by SessionTimelinePanel, a child, so its effect
+    // runs after this component's render. Asserting the call synchronously
+    // raced that effect and only failed on a slow machine.
+    await waitFor(() => expect(load).toHaveBeenCalledWith(2026, 2));
   });
 
   it("offers the season as one select on phones, and switching race loads it", async () => {
@@ -33,7 +43,7 @@ describe("RacesPage", () => {
     const load = vi.spyOn(api, "racePrediction").mockReturnValue(new Promise(() => {}));
     render(<RacesPage />);
     const select = await screen.findByRole("combobox", { name: "Race" });
-    await userEvent.selectOptions(select, "3");
+    await user.selectOptions(select, "3");
     expect(load).toHaveBeenLastCalledWith(2026, 3);
   });
 
@@ -42,7 +52,7 @@ describe("RacesPage", () => {
     vi.spyOn(api, "racePrediction").mockReturnValue(new Promise(() => {}));
     render(<RacesPage />);
     expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load the season.");
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("list", { name: "Races" })).toBeInTheDocument();
   });
 });
