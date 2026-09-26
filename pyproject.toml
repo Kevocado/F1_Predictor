@@ -19,6 +19,14 @@ dependencies = [
     "uvicorn[standard]",
     "fastf1",
     "optuna",
+    # Runtime, not dev: api/explain.py imports httpx to reach the explainer
+    # service, and a Docker image installs only [project].dependencies. With
+    # httpx undeclared the image died on import on the VPS while every test
+    # passed, because the test tooling pulls httpx in anyway.
+    "httpx>=0.27",
+    # api/schemas.py imports pydantic directly. It arrives transitively via
+    # fastapi today, but a direct import should be a direct declaration.
+    "pydantic>=2.9",
 ]
 
 [project.optional-dependencies]
