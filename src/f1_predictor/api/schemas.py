@@ -17,13 +17,26 @@ class RaceSummary(BaseModel):
 
 class DriverPrediction(BaseModel):
     driver_id: str
+    # Display name. The site used to title-case driver_id, which turns
+    # "russell" into "Russell" and drops the first name. The hub needs the
+    # same string the site shows, so it lives here rather than being derived
+    # twice. Never null: falls back to the id, so a driver with no name in
+    # the results feed still renders as something a human can read.
+    driver_name: str
     constructor_id: str | None = None
     p_win: float
     p_podium: float
     p_points_finish: float
     p_dnf: float
-    expected_position: float
-    expected_points: float
+    # Optional because they are NaN in 287 of the 515 race rows of the
+    # committed snapshot (measured: rounds 1-12 and 15 — the tracked-
+    # completed path sets them to NaN when the stored prediction has no
+    # expected values), pydantic 2.13.5 serialises NaN to null on the way
+    # out, and the snapshot-sanitising task in this plan writes literal null
+    # where that NaN used to be — a non-optional float rejects None on
+    # re-validation, so the endpoint would 500 on its own response.
+    expected_position: float | None = None
+    expected_points: float | None = None
     actual_position: int | None = None
     actual_dnf: bool | None = None
 
@@ -49,7 +62,13 @@ class SessionDriverPrediction(BaseModel):
     p_podium: float | None = None
     p_points_finish: float | None = None
     p_dnf: float | None = None
-    expected_position: float
+    # Same null-tolerance as DriverPrediction.expected_position: the routes
+    # pass float("nan") for a driver with no stored expected_position (their
+    # own fallback), pydantic serialises that NaN to null, and the
+    # sanitised snapshot will carry literal null once Task 2 lands — a
+    # non-optional float would 500 the three session-prediction endpoints on
+    # their own responses.
+    expected_position: float | None = None
     actual_position: int | None = None
     actual_dnf: bool | None = None
 

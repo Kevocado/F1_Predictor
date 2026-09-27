@@ -561,6 +561,39 @@ def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, compl
     return sim, tier, "live"
 
 
+def _title_case(driver_id: str) -> str:
+    """The display name for a bare driver id: a verbatim mirror of the F1
+    site's own title-caser (frontend/src/lib/teamColors.ts:46, driverName),
+    so the hub and the site can never disagree about a driver's name — split
+    the id on "_", upper-case the first letter of each part, join with
+    spaces. Verbatim means only the first letter of each part changes and
+    the rest is left exactly as-is, like the site's version; str.capitalize
+    would also lower-case the rest, which the site does not."""
+    return " ".join(part[:1].upper() + part[1:] for part in driver_id.split("_"))
+
+
+def _snapshot_rows_with_names(prediction: dict) -> dict:
+    """A snapshot-served race prediction with driver_name filled into any
+    row that lacks it.
+
+    A snapshot generated before driver_name existed — the committed one at
+    the time this landed — carries rows with only driver_id, and the
+    response_model's non-optional driver_name would reject the route's own
+    response: a 500 on the public deployment until the next snapshot
+    refresh. Filling the same fallback the live path uses keeps every
+    intermediate state serveable, and a row that already carries a name
+    keeps it — the fill only ever fills a gap, never overwrites."""
+    rows = prediction.get("predictions")
+    if not rows:
+        return prediction
+    filled = []
+    for row in rows:
+        if row.get("driver_id") is not None and not row.get("driver_name"):
+            row = {**row, "driver_name": _title_case(str(row["driver_id"]))}
+        filled.append(row)
+    return {**prediction, "predictions": filled}
+
+
 @router.get("/races/{season}/{round_}/prediction", response_model=RacePredictionResponse)
 def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
     if PUBLIC_MODE:
@@ -568,7 +601,7 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
         if snap is not None:
             pred = snap["predictions"].get(str(round_))
             if pred is not None:
-                return honest_source(season, round_, "race", pred)
+                return _snapshot_rows_with_names(honest_source(season, round_, "race", pred))
     return _get_race_prediction_live(season, round_)
 
 
@@ -597,9 +630,20 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
 
     predictions = []
     for _, r in sim.iterrows():
+        driver_id = str(r["driver_id"])
         predictions.append(
             DriverPrediction(
-                driver_id=r["driver_id"],
+                driver_id=driver_id,
+                # The repo has no real-name source at this assembly point:
+                # the only {driver_id: name} map in it (facts.py::
+                # _name_by_driver) reads a "name" field back out of this
+                # very payload, which nothing upstream has ever populated —
+                # it is a consumer of this field, not a source for it. So
+                # every name is the same title-cased id the site renders,
+                # and hub and site agree by construction. When a real name
+                # source lands (jolpica's raw rows carry givenName/familyName
+                # but its parsed frames drop them), it plugs in here.
+                driver_name=_title_case(driver_id),
                 constructor_id=r.get("constructor_id"),
                 p_win=float(r["p_win"]),
                 p_podium=float(r["p_podium"]),
