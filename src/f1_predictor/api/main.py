@@ -17,7 +17,6 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECONDS
 from .facts import router as facts_router
-from .explain import router as explain_router
 from .routes import refresh_public_snapshot_from_remote, router
 
 
@@ -71,12 +70,11 @@ app.include_router(router)
 # router carries no /api prefix. /facts/upcoming is declared before
 # /facts/{session_id} inside facts.py so it isn't swallowed by the path param.
 app.include_router(facts_router)
-# The browser's route to the plain-English summary. Caddy only reverse-proxies
-# this app, so the explainer is reached through here rather than directly.
-# Registered before the static mount below for the same reason as
-# facts_router: the catch-all file handler would otherwise answer
-# /api/explain/* with index.html and a 200.
-app.include_router(explain_router)
+# There is deliberately no /api/explain proxy here. The shared explainer refuses
+# f1 with a 404 (predictor-hub#10), so a proxy would have had one possible
+# outcome: a 502 on every session detail, which the frontend rendered as an
+# error box on a page whose real content was fine. The panel is gone from
+# frontend/src too. tests/test_no_explain_proxy.py keeps both gone.
 
 # Only present in the public Docker deployment (see repo-root Dockerfile),
 # which builds frontend/dist before starting the server — local dev never

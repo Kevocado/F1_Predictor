@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -13,26 +13,6 @@ import { ApiError, api } from "../api/client";
 import type { RacePredictionResponse } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
-
-// The panel renders SessionSummaryPanel, which fetches through api.summary.
-// This file never asserted anything about that, and never stubbed it, so
-// every test that mounted the panel issued a real
-// fetch("/api/explain/<season>-<round>-<session>") against undici — no such
-// server here. Those connection attempts and keep-alive sockets are what
-// stalled a single test past 20s under four concurrent vitest processes: a
-// hang rather than slowness, caused by the test rather than the component.
-//
-// Stubbed here, once, for the whole file. The panel's own behaviour is covered
-// in SessionSummaryPanel.test.tsx; what this file owes the reader is that
-// mounting the panel costs no network.
-beforeEach(() => {
-  vi.spyOn(api, "summary").mockResolvedValue({
-    headline: "Max Verstappen is the pick, but this grid is closer than it looks.",
-    sections: [{ market: "result", title: "Why Verstappen", text: "He has the highest win chance on the grid." }],
-    source: "template", model: "", generated_at: new Date().toISOString(),
-    sport: "f1", pick_timing: "pre_kickoff",
-  });
-});
 
 function race(source: string): RacePredictionResponse {
   return {

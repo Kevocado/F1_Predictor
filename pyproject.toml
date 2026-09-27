@@ -19,7 +19,12 @@ dependencies = [
     "uvicorn[standard]",
     "fastf1",
     "optuna",
-    # Runtime, not dev: api/explain.py imports httpx to reach the explainer
+    # Runtime, not dev: api/explain.py imported httpx to reach the explainer.
+    # That proxy is gone (f1 is refused by the explainer, so it could only 502),
+    # and httpx is no longer imported anywhere in src/ -- which
+    # tests/test_runtime_dependencies.py now asserts. The dependency is kept
+    # because the tests need it and because dropping a declared runtime dep is a
+    # separate change with an image-build risk that cannot be checked from here.
     # service, and a Docker image installs only [project].dependencies. With
     # httpx undeclared the image died on import on the VPS while every test
     # passed, because the test tooling pulls httpx in anyway.
