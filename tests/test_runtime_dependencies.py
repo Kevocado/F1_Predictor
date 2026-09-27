@@ -72,13 +72,45 @@ def _imported_modules() -> set[str]:
     return found
 
 
-def test_the_sweep_finds_httpx_so_it_cannot_vanish_silently():
+def test_the_sweep_still_sees_a_real_runtime_import():
     """Guards the sweep below against passing because it found nothing.
 
-    httpx is imported by api/explain.py in every one of these repos, so if that
-    ever changes this file is wrong and should be updated deliberately.
+    The canary used to be `httpx`, on the grounds that `api/explain.py` imported
+    it in every one of these repos. That is no longer true here: this is the
+    update its own docstring asked for. The proxy was F1's only httpx user, and
+    with it gone the sweep had nothing left to check — so `httpx` as a canary
+    would now be asserting a fact about the code that had stopped being true,
+    which is a test that fails for a reason nobody can act on.
+
+    `fastapi` and `pydantic` are canaries that are true, and true for a boring
+    reason: both are imported at runtime and either would break the image on
+    import if it were ever dropped. A canary has to be a fact that cannot
+    quietly stop being a fact.
     """
-    assert "httpx" in _imported_modules(), "the sweep no longer sees httpx; update this test"
+    found = _imported_modules()
+    for canary in ("fastapi", "pydantic"):
+        assert canary in found, (
+            f"the sweep no longer sees {canary}, so the sweep below is passing "
+            f"because it found nothing: update this test"
+        )
+
+
+def test_httpx_is_no_longer_a_runtime_import():
+    """The proxy was its only user, and that is now worth keeping true.
+
+    Not because an unused dependency is dangerous — it is not — but because
+    pyproject.toml still lists `httpx` as a runtime dependency *because
+    api/explain.py imports it*, and that reason is gone. The dependency stays (the
+    tests need it, and dropping a declared runtime dep is a separate change with
+    an image-build risk that cannot be checked from here), but if a future change
+    starts importing httpx at runtime again this fails, and the pyproject comment
+    can be made true again instead of staying a fossil.
+    """
+    assert "httpx" not in _imported_modules(), (
+        "httpx is imported at runtime again. Either pyproject.toml's stated "
+        "reason for listing it as a runtime dependency needs restoring, or it is "
+        "now test-only and should move to the dev extra."
+    )
 
 
 @pytest.mark.parametrize("module", sorted(_imported_modules()))
