@@ -1,0 +1,53 @@
+name: Frontend CI
+
+# This repo had no frontend test job at all, which is how a suite of 41 tests
+# sat broken — 7 failing — through a review cycle without anyone noticing.
+# Every step below is blocking, and the suite was green before this file
+# existed. Please keep it that way: a red-on-arrival job teaches people to
+# ignore red, and then the job is worth nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Typecheck, test, lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24, not the Dockerfile's node:20-slim. vite accepts 20.19, but
+      # vitest 5 declares engines.node "^22.12.0 || ^24.0.0 || >=26.0.0" and
+      # cannot run on 20 at all — the build stage and the test stage need
+      # different Node majors, and the Dockerfile only ever built.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # Typecheck first: it is the cheapest step that catches a test written
+      # against an API that no longer exists, which is exactly the failure
+      # that cost this suite seven tests.
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Test
+        run: npm test
+
+      # Warnings, not errors. oxlint exits 0 on warnings-only, so the 7
+      # pre-existing ones do not turn this job red; a new *error* will.
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
