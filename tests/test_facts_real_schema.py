@@ -37,13 +37,19 @@ def _real_prediction(source: str = "tracked") -> dict:
         season=2026, round=12, race_name="Italian Grand Prix",
         tier="post_qualifying", source=source,
         predictions=[
-            DriverPrediction(driver_id="max_verstappen", p_win=0.31, p_podium=0.72,
+            # driver_name is required since the API grew the field: the
+            # route fills _title_case(driver_id), so the fixture mirrors
+            # that (the title-cased id) rather than a hand-invented name.
+            DriverPrediction(driver_id="max_verstappen", driver_name="Max Verstappen",
+                             p_win=0.31, p_podium=0.72,
                              p_points_finish=0.66, p_dnf=0.12,
                              expected_position=1.4, expected_points=9.1),
-            DriverPrediction(driver_id="lando_norris", p_win=0.27, p_podium=0.70,
+            DriverPrediction(driver_id="lando_norris", driver_name="Lando Norris",
+                             p_win=0.27, p_podium=0.70,
                              p_points_finish=0.64, p_dnf=0.14,
                              expected_position=3.9, expected_points=8.4),
-            DriverPrediction(driver_id="george_russell", p_win=0.19, p_podium=0.61,
+            DriverPrediction(driver_id="george_russell", driver_name="George Russell",
+                             p_win=0.19, p_podium=0.61,
                              p_points_finish=0.58, p_dnf=0.16,
                              expected_position=2.2, expected_points=7.9),
         ],
