@@ -9,7 +9,6 @@ import type {
   SessionType,
   TrackRecordResponse,
 } from "../types";
-import type { Explanation } from "../predictor-ui";
 
 // Same-origin /api: the public Docker build serves frontend and backend
 // together, and the dev server proxies /api to the local backend (see
@@ -40,18 +39,6 @@ const post = <T,>(path: string) => request<T>(path, { method: "POST" });
 
 export const api = {
   races: (season?: number) => get<RaceSummary[]>(season ? `/races?season=${season}` : "/races"),
-  /** The plain-English summary, from the separate explainer service.
-   *
-   *  Named `summary` rather than `explain` on purpose: this client already has
-   *  an `explainPrediction`, which is F1's own per-driver strength breakdown
-   *  and has nothing to do with the prose panel. Two similarly named methods
-   *  on one client is how the wrong one ends up wired to a component.
-   *
-   *  Same-origin /api, on the family 15 s timeout, proxied to the explainer by
-   *  this site's own FastAPI. Deliberately uncached: the panel's footer states
-   *  how long ago the summary was written, so a cached copy would show a stale
-   *  age beside fresh numbers. The service caches by the facts it was given. */
-  summary: (sport: string, id: string) => get<Explanation>(`/explain/${sport}/${encodeURIComponent(id)}`),
   racePrediction: (season: number, round: number) =>
     get<RacePredictionResponse>(`/races/${season}/${round}/prediction`),
   sessionPrediction: (sessionType: Exclude<SessionType, "race">, season: number, round: number) => {
