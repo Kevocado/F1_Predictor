@@ -61,3 +61,65 @@ def test_expected_position_and_points_are_null_not_nan():
     assert got["expected_position"] is None
     assert got["expected_points"] is None
     assert got["p_win"] == 0.15
+
+
+def test_session_predictions_carry_session_datetime():
+    """The field survives the snapshot round-trip — read the
+    built artifact, confirm session_predictions[st][round]["session_datetime"]
+    is present on rebuilt rounds. This was invisible to every existing
+    test because the payload had no timing field at all.
+
+    Older rounds in the same snapshot predate the field (they were
+    reused verbatim); the field is nullable with a None default so
+    those rounds still validate — but freshly rebuilt rounds always
+    carry it."""
+    import json
+    from f1_predictor.config import PUBLIC_SNAPSHOT_PATH
+
+    if not PUBLIC_SNAPSHOT_PATH.exists():
+        pytest.skip("no committed snapshot in this checkout")
+
+    snap = json.loads(PUBLIC_SNAPSHOT_PATH.read_text())
+    rebuilt_count = 0
+    for session_type, rounds in snap.get("session_predictions", {}).items():
+        for round_key, pred in rounds.items():
+            if "session_datetime" in pred:
+                rebuilt_count += 1
+                assert pred["session_datetime"] is None or pred["session_datetime"].endswith("Z"), (
+                    f"session_predictions[{session_type}][{round_key}] session_datetime not ISO: {pred['session_datetime']}"
+                )
+    # At least some rounds were rebuilt with the new field
+    assert rebuilt_count > 0, "no session_predictions block had session_datetime"
+
+
+def test_committed_snapshot_session_datetime_round_trip():
+    """The committed public_snapshot.json round-trips — session_datetime
+    is present on rebuilt blocks and absent on reused blocks. Both
+    are valid because the field is nullable with a None default.
+
+    The snapshot also predates driver_name on some rows, so we
+    only validate session_datetime presence/absence rather than
+    full schema validation of the entire file."""
+    import json
+    from f1_predictor.config import PUBLIC_SNAPSHOT_PATH
+
+    if not PUBLIC_SNAPSHOT_PATH.exists():
+        pytest.skip("no committed snapshot in this checkout")
+
+    text = PUBLIC_SNAPSHOT_PATH.read_text()
+    snap = json.loads(text)
+
+    rebuilt = 0
+    for session_type, rounds in snap.get("session_predictions", {}).items():
+        for round_key, pred in rounds.items():
+            if "session_datetime" in pred:
+                rebuilt += 1
+                assert pred["session_datetime"] is None or pred["session_datetime"].endswith("Z")
+    assert rebuilt > 0, "no session_predictions block had session_datetime"
+
+    rebuilt_race = 0
+    for round_key, pred in snap.get("predictions", {}).items():
+        if "session_datetime" in pred:
+            rebuilt_race += 1
+            assert pred["session_datetime"] is None or pred["session_datetime"].endswith("Z")
+    assert rebuilt_race > 0, "no race prediction had session_datetime"

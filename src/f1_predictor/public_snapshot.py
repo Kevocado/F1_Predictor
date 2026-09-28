@@ -71,6 +71,21 @@ def _session_types_for(race: dict) -> list[str]:
     return list(_ALL_SESSION_TYPES) if race["is_sprint_weekend"] else ["qualifying"]
 
 
+def _session_order_for(race: dict) -> list[str]:
+    """Ordered list of session types for this race weekend, earliest
+    to latest. A sprint weekend runs sprint_qualifying → sprint →
+    qualifying → race; a normal weekend runs qualifying → race.
+
+    This is what a consumer uses to determine which session comes
+    next, rather than picking "the earliest session with a
+    prediction" — which would jump straight to a race days early,
+    because the snapshot already carries future race predictions
+    with source: live.
+    """
+    is_sprint = bool(race["is_sprint_weekend"])
+    return ["sprint_qualifying", "sprint", "qualifying", "race"] if is_sprint else ["qualifying", "race"]
+
+
 def build_snapshot(previous: dict | None = None, season: int | None = None) -> dict:
     season = season or config.CURRENT_SEASON
     races = jsonable_encoder(routes._list_races_live(season))

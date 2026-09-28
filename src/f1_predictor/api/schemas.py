@@ -48,6 +48,10 @@ class RacePredictionResponse(BaseModel):
     tier: str
     source: str  # "live" (computed fresh), "tracked" (snapshot made before the session), "rebuilt" (snapshot written after it), "backtest" (historical replay)
     predictions: list[DriverPrediction]
+    # When this session starts, from the schedule row. Nullable so
+    # the endpoint never 500s on a missing value from an older
+    # committed snapshot that predates the field.
+    session_datetime: str | None = None
 
 
 class SessionDriverPrediction(BaseModel):
@@ -81,6 +85,22 @@ class SessionPredictionResponse(BaseModel):
     tier: str
     source: str  # "live" | "tracked" | "rebuilt" | "backtest"
     predictions: list[SessionDriverPrediction]
+    # When this specific session starts, from the schedule row.
+    # Nullable for the same reason as RacePredictionResponse.
+    session_datetime: str | None = None
+
+
+# Session ordering from earliest to latest in a race weekend.
+# A sprint weekend runs: sprint_qualifying → sprint → qualifying → race.
+# A normal weekend runs: qualifying → race.
+# The hub uses this to know which session comes next rather than
+# picking "the earliest session with a prediction" (which would
+# jump straight to a race days early, because the snapshot already
+# carries race predictions for future rounds with source: live).
+SESSION_ORDER = {
+    False: ["qualifying", "race"],
+    True: ["sprint_qualifying", "sprint", "qualifying", "race"],
+}
 
 
 class ChampionshipEntry(BaseModel):

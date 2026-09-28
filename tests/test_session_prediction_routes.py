@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from f1_predictor.api import routes
+from f1_predictor.public_snapshot import _session_order_for
 
 
 def _fake_schedule(is_sprint_weekend: bool) -> pd.DataFrame:
@@ -128,3 +129,93 @@ def test_sprint_prediction_completed_path_no_columns_empty_sprint_results_does_n
     # path (via the mocked _predict_upcoming_session) rather than raising.
     assert result.session_type == "sprint"
     assert result.predictions[0].p_win == pytest.approx(0.3)
+
+
+def test_qualifying_prediction_carries_session_datetime(monkeypatch):
+    """session_datetime is populated from the schedule row and parses."""
+    monkeypatch.setattr(routes, "_cache", {})
+    monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
+    monkeypatch.setattr(routes, "_predict_upcoming_session", lambda *a: (_fake_sim(), "post_practice"))
+
+    result = routes.get_qualifying_prediction(2024, 5)
+
+    assert result.session_datetime is not None
+    assert result.session_datetime.endswith("Z")
+
+
+def test_sprint_prediction_carries_session_datetime(monkeypatch):
+    """Sprint prediction also carries session_datetime."""
+    monkeypatch.setattr(routes, "_cache", {})
+    monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(True))
+    monkeypatch.setattr(routes, "_predict_upcoming_session", lambda *a: (_fake_sim(), "post_sprint_qualifying"))
+
+    result = routes.get_sprint_prediction(2024, 5)
+
+    assert result.session_datetime is not None
+
+
+def test_race_prediction_carries_session_datetime(monkeypatch):
+    """Race prediction carries session_datetime from race_datetime."""
+    monkeypatch.setattr(routes, "_cache", {})
+    monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+
+    result = routes.get_race_prediction(2024, 5)
+
+    assert result.session_datetime is not None
+    assert result.session_datetime.endswith("Z")
+
+
+def test_race_prediction_missing_session_datetime_validates(monkeypatch):
+    """Regression guard: a race prediction with a missing or None
+    session_datetime must NOT 500 — the field is nullable. The
+    committed snapshot predates the field and has no session_datetime."""
+    monkeypatch.setattr(routes, "_cache", {})
+    monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+
+    # Even with the field missing from the source data (simulating
+    # an old snapshot dict), validation succeeds because the field
+    # is nullable with a None default.
+    snap = {"season": 2024, "predictions": {"5": {"season": 2024, "round": 5, "race_name": "Fake GP",
+        "tier": "pre_weekend", "source": "live", "predictions": [], "session_datetime": None}}}
+    monkeypatch.setattr(routes, "PUBLIC_MODE", True)
+    monkeypatch.setattr(routes, "_public_snapshot", lambda: snap)
+
+    result = routes.get_race_prediction(2024, 5)
+    # In PUBLIC_MODE the function returns a dict (FastAPI validates it
+    # against response_model). Verify the dict has the field.
+    assert isinstance(result, dict)
+    assert result.get("session_datetime") is None
+
+
+def test_race_prediction_without_session_datetime_key_in_snapshot(monkeypatch):
+    """Even when the snapshot dict has no session_datetime key at all
+    (old committed snapshot), the endpoint still validates and serves
+    — the field is optional with a None default on the schema."""
+    monkeypatch.setattr(routes, "_cache", {})
+    monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+
+    # Old snapshot dict without session_datetime key
+    snap = {"season": 2024, "predictions": {"5": {"season": 2024, "round": 5, "race_name": "Fake GP",
+        "tier": "pre_weekend", "source": "live", "predictions": []}}}
+    monkeypatch.setattr(routes, "PUBLIC_MODE", True)
+    monkeypatch.setattr(routes, "_public_snapshot", lambda: snap)
+
+    result = routes.get_race_prediction(2024, 5)
+    assert isinstance(result, dict)
+    # pydantic uses the None default for the missing key
+    assert result.get("session_datetime") is None
+
+
+def test_session_order_helper_sprint_weekend():
+    """A sprint weekend returns sprint_qualifying → sprint → qualifying → race."""
+    sprint_race = {"is_sprint_weekend": True}
+    assert _session_order_for(sprint_race) == ["sprint_qualifying", "sprint", "qualifying", "race"]
+
+
+def test_session_order_helper_normal_weekend():
+    """A normal weekend returns qualifying → race."""
+    normal_race = {"is_sprint_weekend": False}
+    assert _session_order_for(normal_race) == ["qualifying", "race"]

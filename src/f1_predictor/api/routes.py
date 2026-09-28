@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from typing import Any
 
 import pandas as pd
 import requests
@@ -117,6 +118,23 @@ _cache: dict[str, tuple[float, object]] = {}
 
 _QUALI_MARKET_FIELDS = ("p_pole", "p_top_3", "p_top_10")
 _RACE_MARKET_FIELDS = ("p_win", "p_podium", "p_points_finish", "p_dnf")
+
+# Maps session_type to the schedule column that carries its start datetime.
+_SESSION_DATETIME_COL = {
+    "sprint_qualifying": "sprint_quali_datetime",
+    "sprint": "sprint_datetime",
+    "qualifying": "qualifying_datetime",
+    "race": "race_datetime",
+}
+
+
+def _iso_dt(value: Any) -> str | None:
+    """Convert a schedule datetime cell to an ISO string, or None."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, str):
+        return value
+    return pd.Timestamp(value).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _cached(key: str, build_fn, ttl: float = _CACHE_TTL_SECONDS):
@@ -453,6 +471,7 @@ def _get_session_prediction_live(season: int, round_: int, session_type: str) ->
     return SessionPredictionResponse(
         season=season, round=round_, race_name=race_row["race_name"], session_type=session_type,
         tier=tier, source=source, predictions=predictions,
+        session_datetime=_iso_dt(race_row.get(_SESSION_DATETIME_COL.get(session_type))),
     )
 
 
@@ -658,7 +677,8 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     predictions.sort(key=lambda p: -p.p_win)
 
     return RacePredictionResponse(
-        season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions
+        season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions,
+        session_datetime=_iso_dt(race_row.get("race_datetime")),
     )
 
 
