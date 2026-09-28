@@ -32,6 +32,7 @@ TRACKING_DB_PATH for the rest of both mechanisms.
 from __future__ import annotations
 
 import json
+import math
 
 import pandas as pd
 from fastapi.encoders import jsonable_encoder
@@ -68,6 +69,21 @@ def _current_round(races: list) -> int:
 
 def _session_types_for(race: dict) -> list[str]:
     return list(_ALL_SESSION_TYPES) if race["is_sprint_weekend"] else ["qualifying"]
+
+
+def _session_order_for(race: dict) -> list[str]:
+    """Ordered list of session types for this race weekend, earliest
+    to latest. A sprint weekend runs sprint_qualifying → sprint →
+    qualifying → race; a normal weekend runs qualifying → race.
+
+    This is what a consumer uses to determine which session comes
+    next, rather than picking "the earliest session with a
+    prediction" — which would jump straight to a race days early,
+    because the snapshot already carries future race predictions
+    with source: live.
+    """
+    is_sprint = bool(race["is_sprint_weekend"])
+    return ["sprint_qualifying", "sprint", "qualifying", "race"] if is_sprint else ["qualifying", "race"]
 
 
 def build_snapshot(previous: dict | None = None, season: int | None = None) -> dict:
@@ -201,10 +217,30 @@ def _reconcile_predictions(season: int) -> None:
         store.reconcile_session_predictions(sprint_df.rename(columns={"grid": "position"}), "sprint_qualifying")
 
 
+def sanitize_floats(value):
+    """Replace every non-finite float with None, recursively.
+
+    The feature pipeline produces NaN for "this market has no line" (an
+    unplayed game has no spread, a team with no cover model has no cover
+    probability). NaN is not valid JSON, and the public deployment serves
+    this file verbatim through a starlette JSONResponse, which renders with
+    allow_nan=False and turns a NaN into a 500. Null is the honest
+    encoding: the UI already renders a dash for a missing number.
+    """
+    if isinstance(value, float):
+        return None if not math.isfinite(value) else value
+    if isinstance(value, dict):
+        return {k: sanitize_floats(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [sanitize_floats(v) for v in value]
+    return value
+
+
 def main() -> None:
     previous = json.loads(config.PUBLIC_SNAPSHOT_PATH.read_text()) if config.PUBLIC_SNAPSHOT_PATH.exists() else None
     snapshot = jsonable_encoder(build_snapshot(previous))
-    config.PUBLIC_SNAPSHOT_PATH.write_text(json.dumps(snapshot, indent=2))
+    snapshot = sanitize_floats(snapshot)
+    config.PUBLIC_SNAPSHOT_PATH.write_text(json.dumps(snapshot, indent=2, allow_nan=False))
     print(f"Wrote {config.PUBLIC_SNAPSHOT_PATH} ({config.PUBLIC_SNAPSHOT_PATH.stat().st_size / 1024:.0f} KB)")
 
 

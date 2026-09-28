@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from typing import Any
 
 import pandas as pd
 import requests
@@ -117,6 +118,23 @@ _cache: dict[str, tuple[float, object]] = {}
 
 _QUALI_MARKET_FIELDS = ("p_pole", "p_top_3", "p_top_10")
 _RACE_MARKET_FIELDS = ("p_win", "p_podium", "p_points_finish", "p_dnf")
+
+# Maps session_type to the schedule column that carries its start datetime.
+_SESSION_DATETIME_COL = {
+    "sprint_qualifying": "sprint_quali_datetime",
+    "sprint": "sprint_datetime",
+    "qualifying": "qualifying_datetime",
+    "race": "race_datetime",
+}
+
+
+def _iso_dt(value: Any) -> str | None:
+    """Convert a schedule datetime cell to an ISO string, or None."""
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, str):
+        return value
+    return pd.Timestamp(value).tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _cached(key: str, build_fn, ttl: float = _CACHE_TTL_SECONDS):
@@ -453,6 +471,7 @@ def _get_session_prediction_live(season: int, round_: int, session_type: str) ->
     return SessionPredictionResponse(
         season=season, round=round_, race_name=race_row["race_name"], session_type=session_type,
         tier=tier, source=source, predictions=predictions,
+        session_datetime=_iso_dt(race_row.get(_SESSION_DATETIME_COL.get(session_type))),
     )
 
 
@@ -561,6 +580,39 @@ def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, compl
     return sim, tier, "live"
 
 
+def _title_case(driver_id: str) -> str:
+    """The display name for a bare driver id: a verbatim mirror of the F1
+    site's own title-caser (frontend/src/lib/teamColors.ts:46, driverName),
+    so the hub and the site can never disagree about a driver's name — split
+    the id on "_", upper-case the first letter of each part, join with
+    spaces. Verbatim means only the first letter of each part changes and
+    the rest is left exactly as-is, like the site's version; str.capitalize
+    would also lower-case the rest, which the site does not."""
+    return " ".join(part[:1].upper() + part[1:] for part in driver_id.split("_"))
+
+
+def _snapshot_rows_with_names(prediction: dict) -> dict:
+    """A snapshot-served race prediction with driver_name filled into any
+    row that lacks it.
+
+    A snapshot generated before driver_name existed — the committed one at
+    the time this landed — carries rows with only driver_id, and the
+    response_model's non-optional driver_name would reject the route's own
+    response: a 500 on the public deployment until the next snapshot
+    refresh. Filling the same fallback the live path uses keeps every
+    intermediate state serveable, and a row that already carries a name
+    keeps it — the fill only ever fills a gap, never overwrites."""
+    rows = prediction.get("predictions")
+    if not rows:
+        return prediction
+    filled = []
+    for row in rows:
+        if row.get("driver_id") is not None and not row.get("driver_name"):
+            row = {**row, "driver_name": _title_case(str(row["driver_id"]))}
+        filled.append(row)
+    return {**prediction, "predictions": filled}
+
+
 @router.get("/races/{season}/{round_}/prediction", response_model=RacePredictionResponse)
 def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
     if PUBLIC_MODE:
@@ -568,7 +620,7 @@ def get_race_prediction(season: int, round_: int) -> RacePredictionResponse:
         if snap is not None:
             pred = snap["predictions"].get(str(round_))
             if pred is not None:
-                return honest_source(season, round_, "race", pred)
+                return _snapshot_rows_with_names(honest_source(season, round_, "race", pred))
     return _get_race_prediction_live(season, round_)
 
 
@@ -597,9 +649,20 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
 
     predictions = []
     for _, r in sim.iterrows():
+        driver_id = str(r["driver_id"])
         predictions.append(
             DriverPrediction(
-                driver_id=r["driver_id"],
+                driver_id=driver_id,
+                # The repo has no real-name source at this assembly point:
+                # the only {driver_id: name} map in it (facts.py::
+                # _name_by_driver) reads a "name" field back out of this
+                # very payload, which nothing upstream has ever populated —
+                # it is a consumer of this field, not a source for it. So
+                # every name is the same title-cased id the site renders,
+                # and hub and site agree by construction. When a real name
+                # source lands (jolpica's raw rows carry givenName/familyName
+                # but its parsed frames drop them), it plugs in here.
+                driver_name=_title_case(driver_id),
                 constructor_id=r.get("constructor_id"),
                 p_win=float(r["p_win"]),
                 p_podium=float(r["p_podium"]),
@@ -614,7 +677,8 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     predictions.sort(key=lambda p: -p.p_win)
 
     return RacePredictionResponse(
-        season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions
+        season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions,
+        session_datetime=_iso_dt(race_row.get("race_datetime")),
     )
 
 
@@ -735,6 +799,29 @@ def get_live_current() -> dict:
     from ..models import live_poller
 
     return live_poller.get_cached()
+
+
+@router.get("/snapshot-meta")
+def get_snapshot_meta() -> dict:
+    """When the data this site serves was actually produced.
+
+    The snapshot carries generated_at at its top level, but every route that
+    reads it returns a nested block (a season's races, a round's
+    predictions) and drops it, so no other endpoint can answer "how old are
+    these numbers?". The hub needs to say that on the card, and this is
+    also the honest answer for anyone tracking how fresh a deployment is.
+    Reads the raw _public_snapshot() rather than _snapshot_for_season() so
+    this answers even when no snapshot matches the requested season.
+
+    Empty dict when no snapshot has been generated yet -- a public deploy
+    before its first snapshot -- so this reports source "live" rather than
+    raising. That is the real state, not a failure.
+    """
+    snap = _public_snapshot()
+    return {
+        "generated_at": snap.get("generated_at"),
+        "source": "public_snapshot" if snap else "live",
+    }
 
 
 @router.post("/retrain", dependencies=[Depends(_admin_only)])
