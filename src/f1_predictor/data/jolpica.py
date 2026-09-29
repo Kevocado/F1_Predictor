@@ -12,11 +12,14 @@ season's worth of per-round calls be replayed offline after the first run.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 
 import pandas as pd
 import requests
+
+logger = logging.getLogger(__name__)
 
 from ..config import (
     CURRENT_SEASON,
@@ -271,6 +274,45 @@ def load_season_results(season: int, force_refresh: bool = False) -> pd.DataFram
         if not df.empty:
             frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+#: How many prior seasons to pull for feature history. Circuit form is an
+#: expanding mean per (driver, circuit), and a circuit is typically visited once
+#: a season — so with only the current season loaded, EVERY future race has null
+#: circuit features. That is not an edge case: the 2026 calendar visits no
+#: circuit twice.
+#:
+#: Measured: with prior seasons merged, round 17 (Marina Bay, 40 races across
+#: 2024-25) goes from 0/23 drivers having circuit history to 22/23. Round 16
+#: stays 0/23 and that is correct — Sepang has no race in the loaded window.
+HISTORY_SEASONS = 3
+
+
+def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Results and schedule for `season` and the seasons before it.
+
+    Both frames carry a `season` column, because `features.circuit.with_circuit`
+    joins on `["season", "round"]` — a schedule without it would join on a
+    column that does not exist and every circuit would come out null. That is
+    the shape of the bug this function exists to fix, and it is why the frames
+    are stamped here rather than at the call site.
+    """
+    seasons = [season - i for i in range(HISTORY_SEASONS) if season - i > 1950]
+    results, schedules = [], []
+    for s in seasons:
+        try:
+            df = load_season_results(s, force_refresh=force_refresh)
+            sch = fetch_season_schedule(s, force_refresh=force_refresh)
+        except Exception as exc:  # a season the upstream does not carry yet
+            logger.info("no %s history: %s", s, exc)
+            continue
+        if df.empty or sch.empty:
+            continue
+        results.append(df.assign(season=s))
+        schedules.append(sch.assign(season=s))
+    if not results:
+        return pd.DataFrame(), pd.DataFrame()
+    return pd.concat(results, ignore_index=True), pd.concat(schedules, ignore_index=True)
 
 
 def load_season_qualifying(season: int, force_refresh: bool = False) -> pd.DataFrame:
