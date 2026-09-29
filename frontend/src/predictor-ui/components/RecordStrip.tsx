@@ -1,4 +1,4 @@
-// Synced from predictor-ui@0a7cd63be8fc. Do not edit here: change predictor-hub/packages/predictor-ui and re-run scripts/sync-ui.mjs.
+// Synced from predictor-ui@56ad800924dc. Do not edit here: change predictor-hub/packages/predictor-ui and re-run scripts/sync-ui.mjs.
 import { record as fmtRecord } from "../fmt";
 
 /**
