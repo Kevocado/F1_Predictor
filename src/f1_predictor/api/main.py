@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECONDS
+from .explain import router as explain_router
 from .facts import router as facts_router
 from .routes import refresh_public_snapshot_from_remote, router
 
@@ -70,11 +71,10 @@ app.include_router(router)
 # router carries no /api prefix. /facts/upcoming is declared before
 # /facts/{session_id} inside facts.py so it isn't swallowed by the path param.
 app.include_router(facts_router)
-# There is deliberately no /api/explain proxy here. The shared explainer refuses
-# f1 with a 404 (predictor-hub#10), so a proxy would have had one possible
-# outcome: a 502 on every session detail, which the frontend rendered as an
-# error box on a page whose real content was fine. The panel is gone from
-# frontend/src too. tests/test_no_explain_proxy.py keeps both gone.
+# The shared explainer serves f1 now (the old refusal was about the win
+# probability, not the race story), so the session page gets its summary
+# through this proxy rather than living without one.
+app.include_router(explain_router)
 
 # Only present in the public Docker deployment (see repo-root Dockerfile),
 # which builds frontend/dist before starting the server — local dev never

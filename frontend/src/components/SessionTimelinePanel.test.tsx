@@ -74,3 +74,70 @@ describe("SessionTimelinePanel", () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
+
+/** The plain-English panel, reduced: F1's facts carry win, podium, points and
+ *  dnf and NO line, so the flow says the pick and stops. A market-line tile or
+ *  a split-bar market row here would be narrating a disagreement with a book
+ *  that quoted nothing — the half of the original refusal that still stands. */
+const f1summary = {
+  verdict: "Norris is the pick, with Verstappen the danger.",
+  band: "moderate",
+  factors: [{ key: "win", direction: "up", headline: "Pace", text: "The model has Norris." }],
+  source: "template" as const,
+  model: "",
+  generated_at: new Date().toISOString(),
+  sport: "f1",
+  pick_timing: "pre_kickoff" as const,
+};
+
+describe("the plain-English panel, reduced", () => {
+  it("draws no market line and no market row, with the pick still legible", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
+    render(<SessionTimelinePanel {...props} />);
+    const flow = await screen.findByTestId("fixture-flow");
+    // Non-vacuous: the pick and its probability render, so the absences below
+    // are about a rendered panel, not an empty one.
+    expect(flow).toHaveTextContent(/Max Verstappen/);
+    expect(flow).toHaveTextContent(/win probability/);
+    expect(flow.innerHTML).not.toContain("market-line");
+    expect(flow.innerHTML).not.toContain("split-bar");
+    expect(flow.innerHTML).not.toContain("market line");
+  });
+
+  it("words the moment as the session, never a kickoff", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
+    render(<SessionTimelinePanel {...props} />);
+    const flow = await screen.findByTestId("fixture-flow");
+    expect(flow).toHaveTextContent("before the session");
+    expect(flow.innerHTML).not.toContain("kickoff");
+  });
+
+  it("words a rebuilt snapshot as after the session", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("rebuilt"));
+    render(<SessionTimelinePanel {...props} />);
+    expect(await screen.findByText("The pick was made after the session started.")).toBeInTheDocument();
+  });
+
+  it("makes no summary request until asked, then asks for this session", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
+    const explain = vi.spyOn(api, "explainSession").mockResolvedValue(f1summary as never);
+    render(<SessionTimelinePanel {...props} />);
+    await screen.findByTestId("fixture-flow");
+    expect(explain).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /ai summary/i }));
+    expect(await screen.findByText("Norris is the pick, with Verstappen the danger.")).toBeInTheDocument();
+    expect(explain).toHaveBeenCalledWith(2026, 5, "race");
+  });
+
+  it("shows the flow with no request made when the explainer is unreachable", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
+    const explain = vi.spyOn(api, "explainSession").mockRejectedValue(new Error("unreachable"));
+    render(<SessionTimelinePanel {...props} />);
+    expect(await screen.findByTestId("fixture-flow")).toBeInTheDocument();
+    expect(screen.getByText("Max Verstappen")).toBeInTheDocument();
+    expect(explain).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /ai summary/i })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByTestId("fixture-summary")).toBeNull();
+  });
+});
