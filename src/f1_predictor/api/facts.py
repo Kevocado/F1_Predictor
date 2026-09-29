@@ -202,7 +202,7 @@ def _status(prediction: dict | None, now: datetime, stored_rows: list[dict] | No
     record still knows when the session ran, and a finished race must never be
     advertised as 'upcoming'."""
     rows = stored_rows or []
-    when = _as_utc((prediction or {}).get("session_time"))
+    when = _session_start(prediction)
     if when is None and rows:
         when = _as_utc(rows[0].get("session_time"))
     if when is None or when > now:
@@ -210,6 +210,22 @@ def _status(prediction: dict | None, now: datetime, stored_rows: list[dict] | No
     if rows and all(bool(row.get("resolved")) for row in rows):
         return "final"
     return "live"
+
+
+def _session_start(prediction: dict | None) -> datetime | None:
+    """When this session starts, from the response.
+
+    `SessionPredictionResponse` names it `session_datetime` (schemas.py, with a
+    comment saying where it comes from: the schedule row). This module read
+    `session_time`, which is the STORED-ROW field, so the response's own start
+    time was never seen and `starts_at` shipped as `""` on a session that had a
+    real one.
+
+    The stored-row fallback is kept on purpose: when the live prediction is
+    unavailable the stored record still knows when the session ran, and a
+    finished race must never be advertised as 'upcoming'.
+    """
+    return _as_utc((prediction or {}).get("session_datetime"))
 
 
 def _stored_by_driver(rows: list[dict]) -> dict[str, dict]:
@@ -255,6 +271,20 @@ def _driver_rows(prediction: dict | None) -> list[dict]:
         for short, real in aliases.items():
             if mapped.get(short) is None and mapped.get(real) is not None:
                 mapped[short] = mapped[real]
+        # `name` is an ALIAS of `driver_name`, added here rather than fixed at
+        # each reader, for the same reason the numeric aliases above are.
+        #
+        # The live payload had `pick: {"label": null, "prob": 0.1479}` on a race
+        # where the model had Max Verstappen at 14.8% — so the panel said "There
+        # is no pick for this one yet" while a pick existed. `schemas.py` names
+        # the field `driver_name` and says outright that it is never null; this
+        # module read `name`, which no response carries, and `.get()` on an
+        # absent key returns None rather than raising, so the miss was silent.
+        #
+        # Two readers used it (`_name_by_driver` and the pick below), so fixing
+        # the reader would have been fixing it twice.
+        if mapped.get("name") is None and mapped.get("driver_name") is not None:
+            mapped["name"] = mapped["driver_name"]
         out.append(mapped)
     return out
 
@@ -278,7 +308,8 @@ def _pick_timing(prediction: dict | None, stored_rows: list[dict], stored_tracke
       -> 'rebuilt': shown, never judged. Tracked -> 'pre_kickoff'.
     * UPCOMING: the pick is a live forecast, made before the session by
       definition, so it is 'pre_kickoff' unless the source itself is labelled
-      'rebuilt' or 'backtest'.
+      'rebuilt' or 'backtest' -- or unless the session start is unknown, which is
+      'unknown' rather than a confident guess.
     """
     if started:
         if not stored_rows:
@@ -286,6 +317,15 @@ def _pick_timing(prediction: dict | None, stored_rows: list[dict], stored_tracke
         return "pre_kickoff" if stored_tracked else "rebuilt"
     if (prediction or {}).get("source") in ("rebuilt", "backtest"):
         return "rebuilt"
+    if _session_start(prediction) is None and not stored_rows:
+        # The live payload claimed `pre_kickoff` here. "Made before the session"
+        # is a statement about when the pick was made RELATIVE TO THE SESSION
+        # START, and with no start in the response there is no evidence for it —
+        # the reader would be shown a provenance the payload cannot support.
+        # `unknown` is carried through to the panel and the explainer as
+        # not-verifiable, which is the honest reading; `none` is reserved for
+        # "there is no pick at all" and saying it here would hide the pick.
+        return "unknown"
     return "pre_kickoff"
 
 
@@ -530,7 +570,18 @@ def get_facts(session_id: str) -> dict:
         "sport": "f1",
         "id": str(session_id),
         "title": f"{((prediction or {}).get('race_name') or 'Grand Prix')} · {session.capitalize()}",
-        "starts_at": _iso_utc((prediction or {}).get("session_time")),
+        # Empty string, not null, for an unknown start — the family convention
+        # and the shared contract's own type (`starts_at: str`, and PL emits the
+        # same `_iso_utc(...) or ""`). `null` was tried here and rejected: it
+        # fails the contract on every other site that shares the model, and one
+        # sport sending a different type for the same field is worse than a
+        # shared convention that is merely terse.
+        #
+        # What makes "" honest here is `pick_timing`: a payload with no start
+        # time now reports `unknown` rather than claiming `pre_kickoff`, so
+        # nothing asserts a provenance the payload cannot support. The empty
+        # string is a rendering detail; the timing is the claim.
+        "starts_at": _iso_utc(_session_start(prediction)),
         "status": status,
         "pick_timing": pick_timing,
         "pick": pick,

@@ -35,7 +35,13 @@ class Facts(BaseModel):
     title: str
     starts_at: str
     status: Literal["upcoming", "live", "final"]
-    pick_timing: Literal["pre_kickoff", "rebuilt", "none"]
+    # "unknown" is F1's addition: the session start comes from the schedule, and
+    # when it is absent a pick's timing is not verifiable. Reporting
+    # "pre_kickoff" anyway claims a provenance the payload cannot support, which
+    # is the same look-forward-bias failure B8 exists to prevent on the other
+    # sites. The other sports do not emit it, which is why the shared model's
+    # copy widens rather than the code branching on sport.
+    pick_timing: Literal["pre_kickoff", "rebuilt", "none", "unknown"]
     pick: dict | None = None
     markets: list[Market] = []
     drivers: list[dict] = []
@@ -88,7 +94,13 @@ def _prediction(drivers=None, source="live", tier="pre_qualifying", **over):
         "sprint_weekend": False,
         "tier": tier,
         "source": source,
-        "session_time": SESSION_TIME,
+        # `session_datetime`, matching `RacePredictionResponse` and the real
+        # route. This helper said `session_time`, which is the STORED-ROW field
+        # — and that is why `facts.py` reading `session_time` went unnoticed for
+        # as long as it did: the hand-shaped fixture was shaped like what the
+        # reader wanted, and it passed. `test_facts_real_schema.py` exists to
+        # catch exactly that, and caught the real one.
+        "session_datetime": SESSION_TIME,
         "weather": {"air_temp_c": 28.0, "rain_probability": 0.1},
         "drivers": drivers if drivers is not None else [dict(d) for d in DRIVERS],
     }
@@ -268,7 +280,7 @@ def test_started_session_status_falls_back_to_the_stored_session_time(api, monke
 
 
 def test_started_session_contributors_are_not_rebuilt_from_today(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     stored = _stored(snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z")
     monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
     monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: stored)
@@ -292,7 +304,7 @@ def test_upcoming_session_with_no_stored_rows_is_pre_kickoff_not_rebuilt(api, mo
 
 
 def test_started_session_markets_come_from_the_stored_record(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     stored = _stored(
         drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
         snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
@@ -359,7 +371,7 @@ def test_upcoming_session_shows_the_live_forecast_not_the_late_stored_one(api, m
 # --- THE RULE: a started session uses the stored pre-session record -------
 
 def test_started_session_uses_the_stored_record_not_the_current_prediction(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     # The stored pre-session record disagrees with today's model.
     stored = _stored(
         drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
@@ -380,7 +392,7 @@ def test_started_session_uses_the_stored_record_not_the_current_prediction(api, 
 
 
 def test_started_session_still_lists_its_drivers_from_the_stored_record(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     stored = _stored(
         drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
         snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
@@ -400,7 +412,7 @@ def test_started_session_still_lists_its_drivers_from_the_stored_record(api, mon
 
 
 def test_started_session_with_no_stored_record_has_no_pick(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
     monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: [])
 
@@ -414,7 +426,7 @@ def test_started_session_with_no_stored_record_has_no_pick(api, monkeypatch):
 
 
 def test_started_session_judges_the_stored_pick_on_the_real_result(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     stored = _stored(
         drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
         snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
@@ -435,7 +447,7 @@ def test_started_session_judges_the_stored_pick_on_the_real_result(api, monkeypa
 
 
 def test_started_session_omits_pick_won_for_a_rebuilt_record(api, monkeypatch):
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="rebuilt")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="rebuilt")
     stored = _stored(snapshotted_at="2026-09-01T15:00:00Z", session_time="2026-09-01T14:00:00Z")
     monkeypatch.setattr(facts_mod, "_current_prediction", lambda s, r, x: started)
     monkeypatch.setattr(facts_mod, "_stored_rows", lambda s, r, x, tier=None: stored)
@@ -449,13 +461,13 @@ def test_started_session_omits_pick_won_for_a_rebuilt_record(api, monkeypatch):
 # --- /facts/upcoming ----------------------------------------------------
 
 def test_upcoming_lists_only_sessions_inside_the_window(api, monkeypatch):
-    soon = _prediction(session_time=(NOW + timedelta(hours=10)).isoformat().replace("+00:00", "Z"))
-    later = _prediction(session_time=(NOW + timedelta(hours=100)).isoformat().replace("+00:00", "Z"))
-    past = _prediction(session_time=(NOW - timedelta(hours=10)).isoformat().replace("+00:00", "Z"))
+    soon = _prediction(session_datetime=(NOW + timedelta(hours=10)).isoformat().replace("+00:00", "Z"))
+    later = _prediction(session_datetime=(NOW + timedelta(hours=100)).isoformat().replace("+00:00", "Z"))
+    past = _prediction(session_datetime=(NOW - timedelta(hours=10)).isoformat().replace("+00:00", "Z"))
     monkeypatch.setattr(facts_mod, "_upcoming_sessions", lambda: [
-        {"season": SEASON, "round": 1, "session": "race", "session_time": soon["session_time"]},
-        {"season": SEASON, "round": 2, "session": "race", "session_time": later["session_time"]},
-        {"season": SEASON, "round": 3, "session": "race", "session_time": past["session_time"]},
+        {"season": SEASON, "round": 1, "session": "race", "session_time": soon["session_datetime"]},
+        {"season": SEASON, "round": 2, "session": "race", "session_time": later["session_datetime"]},
+        {"season": SEASON, "round": 3, "session": "race", "session_time": past["session_datetime"]},
     ])
 
     body = api.get("/facts/upcoming?hours=72").json()
@@ -474,7 +486,7 @@ def test_started_session_quotes_no_contributors_computed_after_it_began(api, mon
     # Contributors come from the explain machinery run NOW on the current
     # feature frame; nothing stored them before the session, so a started
     # session must not present them as the reason for the pre-session pick.
-    started = _prediction(session_time="2026-09-01T14:00:00Z", source="live")
+    started = _prediction(session_datetime="2026-09-01T14:00:00Z", source="live")
     stored = _stored(
         drivers=[_driver("nor_1", "Lando Norris", 0.44, grid=2), _driver("ver_1", "Max Verstappen", 0.30, grid=1)],
         snapshotted_at="2026-08-31T10:00:00Z", session_time="2026-09-01T14:00:00Z",
