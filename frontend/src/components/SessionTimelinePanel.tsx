@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type { DriverPrediction, SessionDriverPrediction, SessionType } from "../types";
-import { EmptyState, ErrorState, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
+import { EmptyState, ErrorState, FixtureExplainer, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
+import { driverName } from "../lib/teamColors";
 import { TierBadge } from "./TierBadge";
 import { TimingTower } from "./TimingTower";
 
@@ -66,6 +67,39 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
   const [data, setData] = useState<SessionData | null>(null);
   const [error, setError] = useState<"missing" | "failed" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // The flow's facts: the session's own predictions, no request. The pick is
+  // the highest win probability on the board; finished-ness and rightness come
+  // from the actuals when the session has them, and a rebuilt snapshot says so
+  // in the session's own words. F1 carries no market line, so the flow says
+  // the pick and stops -- the reduced panel, by construction rather than by
+  // configuration.
+  const finite = (x: unknown): number | undefined =>
+    typeof x === "number" && Number.isFinite(x) ? x : undefined;
+  const flowBundle = useMemo(() => {
+    if (!data) return null;
+    let top: SessionDriverPrediction | undefined;
+    for (const p of data.predictions) {
+      const w = finite(p.p_win);
+      if (w !== undefined && (!top || w > (finite(top.p_win) ?? -1))) top = p;
+    }
+    const wasRight =
+      top && top.actual_position != null
+        ? top.actual_position === 1
+        : undefined;
+    return {
+      driver: top ? driverName(top.driver_id) : undefined,
+      pick: top
+        ? {
+            label: driverName(top.driver_id),
+            prob: finite(top.p_win),
+            ...(typeof wasRight === "boolean" ? { was_right: wasRight } : {}),
+          }
+        : undefined,
+      pick_timing: data.source === "rebuilt" || data.source === "backtest" ? "rebuilt" : undefined,
+    };
+  }, [data]);
+  const flowState = data?.predictions.some((p) => p.actual_position != null) ? "finished" : "pre-game";
 
   // A weekend switch (e.g. sprint -> non-sprint) can leave `selected`
   // pointing at a session this race doesn't have -- fall back to Race
@@ -149,8 +183,18 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
       {data && !error && (
         <>
           {/* In plain English, above the timing tower: the one-line answer
-              before the grid. Collapsed to its headline, because a race page
-              is already dense. Fetches on its own and never gates the tower. */}
+              before the grid. The flow renders from the session's own
+              predictions with no request; the AI summary sits behind the
+              button and costs nothing until a reader asks. Reduced by what
+              the facts carry: F1 has no market line, so no line is named. */}
+          <div className="mb-4">
+            <FixtureExplainer
+              sport="f1"
+              state={flowState}
+              bundle={flowBundle}
+              request={() => api.explainSession(season, round, selected)}
+            />
+          </div>
           <TimingTower predictions={data.predictions} season={season} round={round} sessionType={selected} />
         </>
       )}

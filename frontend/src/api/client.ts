@@ -9,6 +9,7 @@ import type {
   SessionType,
   TrackRecordResponse,
 } from "../types";
+import type { Explanation } from "../predictor-ui";
 
 // Same-origin /api: the public Docker build serves frontend and backend
 // together, and the dev server proxies /api to the local backend (see
@@ -51,6 +52,15 @@ export const api = {
     get<ExplainResponse>(
       `/races/${season}/${round}/explain?driver_id=${encodeURIComponent(driverId)}&session_type=${sessionType}`,
     ),
+  /** The shared plain-English summary for a session, via this API's explainer
+   *  proxy (`/api/explain/f1/{id}` -> the service's `/explain/f1/{id}`). The id
+   *  is built only from the season, the round and the tab's own session key --
+   *  all caller-held values, never reader input -- so there is nothing to
+   *  quote or refuse. A session the service has no facts for (sprint
+   *  qualifying) answers 404 there, which the panel renders as its retry
+   *  state, not as a missing panel. */
+  explainSession: (season: number, round: number, session: SessionType) =>
+    get<Explanation>(`/api/explain/f1/${season}-${round}-${session}`),
   championship: (championship: "drivers" | "constructors", season?: number) =>
     get<ChampionshipResponse>(
       `/championship/${championship}${season ? `?season=${season}` : ""}`,
