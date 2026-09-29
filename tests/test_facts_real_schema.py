@@ -36,6 +36,24 @@ def _real_prediction(source: str = "tracked") -> dict:
     return RacePredictionResponse(
         season=2026, round=12, race_name="Italian Grand Prix",
         tier="post_qualifying", source=source,
+        # Carried, because the real route carries it. Verified against the
+        # deployed service on 2026-09-29:
+        #
+        #   /api/races/2026/16/prediction ->
+        #     {"race_name": "Bahrain Grand Prix in Malaysia", "source": "live",
+        #      "session_datetime": "2026-10-04T07:00:00Z", ...}
+        #
+        # The fixture omitting it was what let a second field-name bug through:
+        # `facts.py` read `session_time` and found nothing, so `starts_at` was
+        # empty and the timing degraded to an unverifiable guess — and a fixture
+        # with no start time cannot tell a correct reader from a lucky one.
+        #
+        # Far future on purpose: this is an UPCOMING session, and a past start
+        # would flip the status to 'live' and send the bundle down the started
+        # path, which is a different test. The value is asserted below, so a
+        # date that quietly drifts into the past fails rather than changing
+        # which branch runs.
+        session_datetime="2099-09-06T13:00:00Z",
         predictions=[
             # driver_name is required since the API grew the field: the
             # route fills _title_case(driver_id), so the fixture mirrors
@@ -74,7 +92,14 @@ def test_the_real_race_payload_yields_a_pick(client, live_prediction):
     body = res.json()
     assert body["pick"] is not None, "the real payload must produce a pick"
     assert body["pick"]["prob"] == pytest.approx(0.31)
-    assert body["pick_timing"] in ("pre_kickoff", "none")
+    assert body["pick"]["label"] == "Max Verstappen", (
+        f"label is {body['pick']['label']!r}; the real field is driver_name, and null "
+        f"renders in the panel as 'no pick yet'"
+    )
+    assert body["starts_at"] == "2099-09-06T13:00:00Z", (
+        f"starts_at is {body['starts_at']!r}; the real field is session_datetime"
+    )
+    assert body["pick_timing"] == "pre_kickoff"
 
 
 def test_the_real_payload_keeps_the_story_markets(client, live_prediction):
