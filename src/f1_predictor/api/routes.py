@@ -189,10 +189,18 @@ def _future_feature_frame(season: int, round_: int, race_row: pd.Series) -> tupl
 
     schedule = jolpica.fetch_season_schedule(season)
     race_schedule = schedule[schedule["round"] == round_]
-    results_df = jolpica.load_season_results(season)
+    # Cross-season history, not just this season's. With only the current season
+    # the circuit features were null for EVERY driver at EVERY future race,
+    # because a circuit is visited about once a season and the expanding mean
+    # per (driver, circuit) had nothing prior to average. The model then had no
+    # way to tell two different circuits apart and served byte-identical
+    # predictions for rounds 16 and 17 — every driver, every figure, to four
+    # decimals. Measured: round 17 goes from 0/23 drivers with circuit history
+    # to 22/23 once prior seasons are in the frame.
+    results_df, history_schedule = jolpica.load_history(season)
     driver_ids = jolpica.fetch_driver_standings(season)["driver_id"].tolist()
     future_df = championship_projection.build_future_feature_rows(
-        season, race_schedule, results_df, schedule, driver_ids
+        season, race_schedule, results_df, history_schedule, driver_ids
     )
 
     if tier == session_state.TIER_POST_QUALIFYING:

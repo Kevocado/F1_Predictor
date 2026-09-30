@@ -109,6 +109,13 @@ def build_future_feature_rows(
                 "driver_circuit_avg_points": driver_circuit_avg_pts.get((d, cid), float("nan")),
                 "constructor_circuit_avg_position": constructor_circuit_avg_pos.get((constructor_id, cid), float("nan")),
                 "circuit_dnf_rate": circuit_dnf.get(cid, float("nan")),
+                # Which circuit this row is about, carried so a caller can tell
+                # "no history at this circuit" (a legitimate absence — a new or
+                # returning venue) from "history not loaded" (a bug, and the
+                # state every future race was in). Every other circuit feature
+                # above is null in both cases, so without this the two are
+                # indistinguishable and a null reads as a prediction.
+                "circuit_id": cid,
                 "grid": float("nan"),
                 "quali_position": float("nan"),
                 "quali_gap_to_pole": float("nan"),
