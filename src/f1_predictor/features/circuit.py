@@ -14,7 +14,14 @@ BACK_OF_FIELD_POSITION = 20
 
 def with_circuit(results_df: pd.DataFrame, schedule_df: pd.DataFrame) -> pd.DataFrame:
     circuits = schedule_df[["season", "round", "circuit_id"]].drop_duplicates()
-    return results_df.merge(circuits, on=["season", "round"], how="left")
+    # Rename circuit_id in circuits to avoid conflict during merge
+    circuits = circuits.rename(columns={"circuit_id": "circuit_id_schedule"})
+    merged = results_df.merge(circuits, on=["season", "round"], how="left")
+    # Use the schedule's circuit_id as the authoritative one
+    if "circuit_id" in merged.columns:
+        merged = merged.drop(columns=["circuit_id"])
+    merged = merged.rename(columns={"circuit_id_schedule": "circuit_id"})
+    return merged
 
 
 def compute_circuit_history(results_df: pd.DataFrame, schedule_df: pd.DataFrame) -> pd.DataFrame:
