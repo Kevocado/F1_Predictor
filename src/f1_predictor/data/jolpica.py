@@ -129,6 +129,24 @@ def fetch_season_schedule(season: int, force_refresh: bool = False) -> pd.DataFr
         row = {
             "season": season,
             "round": int(r["round"]),
+            # `raceName` is the upstream event's own name, passed through
+            # verbatim -- this project does not name races, and it has no
+            # circuit->name table to consult. Do not "tidy" a name that looks
+            # wrong; check the record's Circuit block first, and if the two
+            # disagree, the circuit block is what locates the race.
+            #
+            # The 2026 calendar has one name that reads like a bug:
+            #
+            #     round 16   "Bahrain Grand Prix in Malaysia"
+            #                circuitId sepang, Sepang International Circuit,
+            #                locality Kuala Lumpur, country Malaysia
+            #
+            # It is the official name. The FIA announced on 26.07.26 that
+            # Bahrain's 2026 round moved to Malaysia and "will become the
+            # Formula 1 Gulf Air Bahrain Grand Prix in Malaysia", run at
+            # Sepang on 2-4 October. It was reported as a country-mapping bug
+            # and "corrected" to "Bahrain Grand Prix", which would have placed
+            # the race at Sakhir. tests/test_round16_race_identity.py pins it.
             "race_name": r["raceName"],
             "circuit_id": r["Circuit"]["circuitId"],
             "circuit_name": r["Circuit"]["circuitName"],
