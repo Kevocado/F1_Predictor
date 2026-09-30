@@ -59,6 +59,7 @@ def _get(path: str, params: dict | None = None, attempts: int = 3, backoff: floa
     url = f"{JOLPICA_BASE_URL}/{path}"
     headers = {"User-Agent": JOLPICA_USER_AGENT}
     last_err: Exception | None = None
+    last_status: int | None = None
     for attempt in range(attempts):
         _rate_limit()
         try:
@@ -67,6 +68,8 @@ def _get(path: str, params: dict | None = None, attempts: int = 3, backoff: floa
             return resp.json()
         except requests.exceptions.HTTPError as exc:
             last_err = exc
+            if exc.response is not None:
+                last_status = exc.response.status_code
             # Confirmed live in production: a cold container (Render's disk
             # is ephemeral) refetching a full season's worth of history can
             # burn through jolpica's hourly quota. A 429 means "come back
@@ -83,7 +86,13 @@ def _get(path: str, params: dict | None = None, attempts: int = 3, backoff: floa
             last_err = exc
             if attempt < attempts - 1:
                 time.sleep(backoff * (attempt + 1))
-    raise RuntimeError(f"Failed to fetch {url} after {attempts} attempts") from last_err
+    # The status has to survive into the message. This error is the `reason`
+    # a caller logs when it gives up on a season, and "Failed to fetch <url>
+    # after 3 attempts" is the same sentence for a 429 (come back later, the
+    # quota is spent) as for a 404 (that path does not exist) as for a socket
+    # timeout. A warning nobody can act on is close to no warning at all.
+    status = f" (last HTTP status {last_status})" if last_status is not None else ""
+    raise RuntimeError(f"Failed to fetch {url} after {attempts} attempts{status}") from last_err
 
 
 def _is_not_yet_available(data: dict) -> bool:
@@ -314,6 +323,15 @@ def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame
     column that does not exist and every circuit would come out null. That is
     the shape of the bug this function exists to fix, and it is why the frames
     are stamped here rather than at the call site.
+
+    A season that cannot be loaded is skipped rather than raised, because one
+    unavailable season should not cost a run the seasons that did load — and
+    `_get` already retries a 429 with bounded backoff before it gives up, so a
+    transient rate limit is normally absorbed here without a skip at all. But
+    "skipped" is not "silent": every skip below is logged at WARNING naming the
+    season and why. Silently, a rate-limited season just made the history
+    window shorter — circuit form is an expanding mean over whatever arrived,
+    so the model got quietly less informed and nothing said so.
     """
     seasons = [season - i for i in range(HISTORY_SEASONS) if season - i > 1950]
     results, schedules = [], []
@@ -321,10 +339,19 @@ def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame
         try:
             df = load_season_results(s, force_refresh=force_refresh)
             sch = fetch_season_schedule(s, force_refresh=force_refresh)
-        except Exception as exc:  # a season the upstream does not carry yet
-            logger.info("no %s history: %s", s, exc)
+        except Exception as exc:  # noqa: BLE001 - one bad season must not sink the window
+            # Not the same fact as "the upstream does not carry this season
+            # yet": this is a statement about this run (rate limit, connection
+            # reset, timeout), and it is the case that used to cost a season
+            # with an INFO line nobody sees under default logging.
+            logger.warning("skipped %s history — fetch failed: %s: %s", s, type(exc).__name__, exc)
             continue
         if df.empty or sch.empty:
+            # This branch had no log statement at all, so a season could leave
+            # the window without a trace. Say which frame came back empty: an
+            # empty schedule and empty results are different upstream problems.
+            empty = "results" if df.empty else "schedule"
+            logger.warning("skipped %s history — upstream returned an empty %s frame", s, empty)
             continue
         results.append(df.assign(season=s))
         schedules.append(sch.assign(season=s))
