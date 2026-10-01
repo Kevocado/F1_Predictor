@@ -83,7 +83,10 @@ describe("SessionTimelinePanel", () => {
     render(<SessionTimelinePanel {...props} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load this prediction.");
     await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByText("Max Verstappen")).toBeInTheDocument();
+    // Scoped to the timing tower: the picks list also names this driver, and a
+    // document-wide getByText would now match two components and fail on the
+    // count rather than on what this test is about.
+    expect(await within(await screen.findByRole("list")).findByText("Max Verstappen")).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
@@ -152,7 +155,9 @@ describe("the plain-English panel, reduced", () => {
     const explain = vi.spyOn(api, "explainSession").mockRejectedValue(new Error("unreachable"));
     render(<SessionTimelinePanel {...props} />);
     expect(await screen.findByTestId("fixture-flow")).toBeInTheDocument();
-    expect(screen.getByText("Max Verstappen")).toBeInTheDocument();
+    // Scoped to the tower: the picks list names the same driver, and this test
+    // is about the flow rendering without a request.
+    expect(within(await screen.findByRole("list")).getByText("Max Verstappen")).toBeInTheDocument();
     expect(explain).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: /ai summary/i })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -206,8 +211,9 @@ describe("a season the model never got", () => {
 
     expect(await screen.findByText("Shorter history")).toBeInTheDocument();
     // Non-vacuous: the tower renders, so the absence of any suppression above is
-    // about a shortened forecast, not an empty panel.
-    expect(screen.getByText("Max Verstappen")).toBeInTheDocument();
+    // about a shortened forecast, not an empty panel. Scoped to the tower
+    // because the picks list names the same driver.
+    expect(within(screen.getByRole("list")).getByText("Max Verstappen")).toBeInTheDocument();
     expect(screen.getByTestId("instant-block")).toHaveTextContent(/Max Verstappen/);
   });
 
@@ -215,7 +221,7 @@ describe("a season the model never got", () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race("live", completeHistory));
     render(<SessionTimelinePanel {...props} />);
 
-    expect(await screen.findByText("Max Verstappen")).toBeInTheDocument();
+    expect(within(await screen.findByRole("list")).getByText("Max Verstappen")).toBeInTheDocument();
     expect(screen.queryByText("Shorter history")).not.toBeInTheDocument();
     expect(screen.queryByText(/rests on a shorter history/i)).not.toBeInTheDocument();
   });
