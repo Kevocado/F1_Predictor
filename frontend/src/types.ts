@@ -125,11 +125,63 @@ export interface TrackRecordEntry {
   avg_predicted_prob: number;
 }
 
-export interface TrackRecordResponse {
+/** The secondary figure: the same ledger over the picks made BEFORE the
+ *  session started. A grand prix is a weekend, not a kickoff — hence "session". */
+export interface TrackRecordSubset {
   n_resolved: number;
   by_market: TrackRecordEntry[];
-  /** Sessions whose only snapshot was written after they ran: left out. */
+}
+
+/** One recorded pick, with when it was made. Both timestamps are sent so the
+ *  `made_before_session` comparison can be checked rather than trusted. */
+export interface TrackRecordPick {
+  season: number;
+  round: number;
+  race_name: string | null;
+  session_type: string;
+  tier: string;
+  driver_id: string;
+  market: string;
+  predicted_prob: number;
+  actual_outcome: number;
+  made_before_session: boolean;
+  snapshotted_at: string;
+  session_time: string;
+  /** False for a rerun that lost the earliest-pick contest. */
+  counted: boolean;
+}
+
+export interface TrackRecordResponse {
+  /**
+   * The HEADLINE: every counted pick, one per (session, driver, market), the
+   * earliest recorded, whenever it was made. Before 2026-10-01 it was the
+   * sessions every row of which was snapshotted before it started, which on
+   * the shipped database withheld 1,056 of 1,452 recorded picks. Same name,
+   * fuller record.
+   */
+  n_resolved: number;
+  by_market: TrackRecordEntry[];
+  /**
+   * The pre-session subset beside the headline: what the model would have
+   * said on the weekend. The figure to read for live performance.
+   *
+   * Optional on the wire even though the backend always sends it: during a
+   * rolling deploy the old API shape is still in front of this bundle for a
+   * few minutes, and a missing subset is read as "not measured" rather than
+   * crash a page. `n_pre_session` falls back to 0 and the table is omitted.
+   */
+  pre_session?: TrackRecordSubset;
+  /** `n_resolved === n_pre_session + n_post_session_picks`. */
+  n_pre_session?: number;
+  n_post_session_picks?: number;
+  /**
+   * RENAMED IN MEANING, name and unit kept: it used to count sessions LEFT OUT
+   * of the record. It is now how many sessions had at least one counted pick
+   * recorded at or after their own start — the disclosure, not the exclusion.
+   */
   n_rebuilt_sessions?: number;
+  /** Every recorded pick, counted or not, with its own timestamps and label. */
+  per_pick?: TrackRecordPick[];
 }
 
 export interface RaceAccuracyEntry {

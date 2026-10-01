@@ -49,7 +49,9 @@ from .schemas import (
     SessionDriverPrediction,
     SessionPredictionResponse,
     TrackRecordEntry,
+    TrackRecordPick,
     TrackRecordResponse,
+    TrackRecordSubset,
 )
 
 router = APIRouter(prefix="/api")
@@ -836,12 +838,36 @@ def _get_championship_live(championship: str, season: int, n_trials: int) -> Cha
 
 @router.get("/track-record", response_model=TrackRecordResponse)
 def get_track_record(tier: str | None = None, session_type: str | None = None) -> TrackRecordResponse:
+    """The headline over every recorded pick, and the pre-session subset.
+
+    Two figures, served together, because they differ and both are true: the
+    headline counts every counted pick whenever it was made, and `pre_session`
+    is the subset whose own timestamps prove they were made before the session
+    started. `session_type` is dropped from each row exactly as before --
+    `by_market` is grouped on it, so a row's own key already says which it is.
+
+    `per_pick` is the disclosure: one row per recorded pick with its own
+    `snapshotted_at`, its own `session_time` and the derived
+    `made_before_session`, so a reader can check the comparison rather than
+    take it on trust. It is the whole record, not a sample, which is why it is
+    the only endpoint here that grows with the database.
+    """
     result = store.get_session_track_record(session_type=session_type, tier=tier)
-    by_market = [{k: v for k, v in row.items() if k != "session_type"} for row in result["by_market"]]
+
+    def entries(rows: list[dict]) -> list[TrackRecordEntry]:
+        return [TrackRecordEntry(**{k: v for k, v in row.items() if k != "session_type"}) for row in rows]
+
     return TrackRecordResponse(
         n_resolved=result["n_resolved"],
-        by_market=[TrackRecordEntry(**row) for row in by_market],
+        by_market=entries(result["by_market"]),
+        pre_session=TrackRecordSubset(
+            n_resolved=result["pre_session"]["n_resolved"],
+            by_market=entries(result["pre_session"]["by_market"]),
+        ),
+        n_pre_session=result.get("n_pre_session", 0),
+        n_post_session_picks=result.get("n_post_session_picks", 0),
         n_rebuilt_sessions=result.get("n_rebuilt_sessions", 0),
+        per_pick=[TrackRecordPick(**row) for row in result.get("per_pick", [])],
     )
 
 

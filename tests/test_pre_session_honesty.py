@@ -45,16 +45,36 @@ def test_made_before_session_parses_times_and_never_counts_garbage():
     assert store.made_before_session("nonsense", "2026-03-08T04:00:00Z") is False
 
 
-def test_track_record_counts_only_pre_session_snapshots():
+def test_track_record_counts_every_recorded_pick_with_the_pre_session_subset_beside_it():
+    """The old rule, rewritten: "counts ONLY pre-session snapshots".
+
+    This test asserted `win["n"] == 2`, `n_resolved == 8` and
+    `n_rebuilt_sessions == 1` for two sessions -- round 1 snapshotted in time,
+    round 2 entirely after it ran. Round 2 was dropped whole: eight recorded
+    picks in no figure on the page, because a model re-run had touched the
+    session. That is Kevin's "with every model change it will stop tracking",
+    measured, and on the shipped database it withholds 1,056 of 1,452 picks.
+
+    Now both count -- 16 picks, 4 on the `win` market -- and `pre_session`
+    beside them is exactly the figure the old headline published: 8 picks, 2 on
+    `win`, the one session that was snapshotted in time.
+    """
     _record_and_resolve(1, FUTURE)
     _record_and_resolve(2, PAST)
 
     record = store.get_session_track_record(session_type="race")
 
     win = next(r for r in record["by_market"] if r["market"] == "win")
-    assert win["n"] == 2  # two drivers from round 1 only
-    assert record["n_resolved"] == 8  # round 1: 2 drivers x 4 markets
+    assert win["n"] == 4  # two drivers in each of two sessions
+    assert record["n_resolved"] == 16  # 2 sessions x 2 drivers x 4 markets
+    assert record["n_pre_session"] == 8
+    pre_win = next(r for r in record["pre_session"]["by_market"] if r["market"] == "win")
+    assert pre_win["n"] == 2
+    # The same field, same unit (sessions), new meaning: how many sessions had a
+    # counted pick recorded at or after their own start. Nothing is withheld by it.
     assert record["n_rebuilt_sessions"] == 1
+    assert record["n_resolved"] == record["n_pre_session"] + record["n_post_session_picks"]
+    assert record["n_post_session_picks"] == 8
 
 
 def test_race_accuracy_flags_rebuilt_sessions():
@@ -127,9 +147,18 @@ def test_completed_sprint_weekend_qualifying_finds_its_post_sprint_snapshot():
     assert (tier, source) == ("post_sprint", "tracked")
 
 
-def test_a_session_with_any_late_row_is_rebuilt_everywhere():
-    """Calibration and the per-race table agree: one late insert makes the
-    whole session rebuilt, not half-counted."""
+def test_a_session_with_a_late_row_is_counted_in_the_headline_and_kept_out_of_the_pre_session_figure():
+    """The old rule, rewritten: "rebuilt everywhere" -- headline n=0.
+
+    This test asserted `n_resolved == 0` and `n_rebuilt_sessions == 1` for a
+    session with a single late insert: the whole session vanished from the
+    track record, and its all-or-nothing rule was what kept
+    `get_session_accuracy` and the track record "agreeing". They now agree by a
+    different route -- `get_session_accuracy` keeps its own all-or-nothing rule
+    and the track record publishes the pre-session subset beside the headline --
+    so a session with a late row appears in the headline, is absent from
+    `pre_session`, and is still flagged `rebuilt` in the by-race table.
+    """
     store.record_session_predictions(_sim(), 2026, 7, "GP 7", "race", "post_qualifying", FUTURE)
     late = pd.DataFrame([{"driver_id": "new_driver", "constructor_id": "haas", "p_win": 0.01, "p_podium": 0.02, "p_points_finish": 0.1, "p_dnf": 0.1}])
     with store._connect() as conn:
@@ -140,8 +169,20 @@ def test_a_session_with_any_late_row_is_rebuilt_everywhere():
 
     record = store.get_session_track_record(session_type="race")
 
-    assert record["n_resolved"] == 0
+    # Counted: 3 drivers x 4 markets. The fixture restamps the two original
+    # drivers' session_time and snapshotted_at to PAST, so those eight rows
+    # still prove they were made before their session; the late insert's four
+    # do not.
+    assert record["n_resolved"] == 12
+    assert record["n_pre_session"] == 8
+    assert record["n_post_session_picks"] == 4
+    assert record["n_resolved"] == record["n_pre_session"] + record["n_post_session_picks"]
     assert record["n_rebuilt_sessions"] == 1
+    labels = {r["driver_id"]: r["made_before_session"] for r in record["per_pick"]}
+    assert labels == {"norris": True, "leclerc": True, "new_driver": False}, labels
+    # And the by-race table is unchanged: that view keeps its strict rule.
+    by_round = {r["round"]: r for r in store.get_session_accuracy(session_type="race")}
+    assert by_round[7]["rebuilt"] is True
 
 
 def test_a_stored_tracked_label_with_nothing_to_verify_it_is_downgraded():
