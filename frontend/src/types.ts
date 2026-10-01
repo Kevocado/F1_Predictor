@@ -44,6 +44,23 @@ export type Tier = "pre_weekend" | "post_practice" | "post_qualifying";
 // never snapshotted. Only "tracked" ever counts toward the track record.
 export type PredictionSource = "live" | "tracked" | "rebuilt" | "backtest";
 
+/** One season the model asked for and did not get. `reason` is never empty:
+ *  a skip with no explanation is the silence this replaced. */
+export interface MissingSeason {
+  season: number;
+  reason: string;
+}
+
+/** Whether this forecast was built on every season the model asked for.
+ *  `complete` is true only when `missing_seasons` is empty — the lists are here
+ *  so a reader can check that rather than take the boolean on faith. */
+export interface HistoryCoverage {
+  complete: boolean;
+  seasons_requested: number[];
+  seasons_loaded: number[];
+  missing_seasons: MissingSeason[];
+}
+
 export interface RacePredictionResponse {
   season: number;
   round: number;
@@ -51,6 +68,10 @@ export interface RacePredictionResponse {
   tier: Tier;
   source: PredictionSource;
   predictions: DriverPrediction[];
+  /** Absent means "not reported", not "complete": a stored snapshot or a
+   *  backtest was built from a history load this request never made, so
+   *  nothing here can speak for it. Never defaulted to a reassuring value. */
+  history?: HistoryCoverage | null;
 }
 
 export interface SessionDriverPrediction {

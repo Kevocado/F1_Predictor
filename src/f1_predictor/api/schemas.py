@@ -2,7 +2,49 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+
+class MissingSeason(BaseModel):
+    """A season the model needed and did not get, and why.
+
+    `reason` is required with no default. A skip carrying no reason is the same
+    silence the WARNING log line used to be, relocated to a place fewer people
+    look at — the whole reason this block exists is that a reader of the
+    response has no other way to learn it.
+    """
+    season: int
+    reason: str
+
+
+class HistoryCoverage(BaseModel):
+    """Whether the forecast behind this response was built on the full history
+    window, and if not, which seasons are absent.
+
+    An object rather than a bare `history_complete: bool`, for two reasons. A
+    false needs to say WHICH seasons and WHY — a lone boolean is the log line
+    again, minus the log. And a bare true is unfalsifiable: nothing in the
+    payload says which seasons were expected, so a reader cannot check it. The
+    requested and loaded lists are there to make the claim checkable.
+
+    `complete` is derived from `missing_seasons` by the validator below, never
+    taken on trust: a payload claiming a complete window while naming three
+    missing seasons is rejected rather than served.
+    """
+    complete: bool
+    seasons_requested: list[int]
+    seasons_loaded: list[int]
+    missing_seasons: list[MissingSeason] = []
+
+    @model_validator(mode="after")
+    def _complete_matches_the_missing_seasons(self) -> "HistoryCoverage":
+        if self.complete is not (not self.missing_seasons):
+            raise ValueError(
+                f"history coverage claims complete={self.complete} while naming "
+                f"{len(self.missing_seasons)} missing season(s); the flag is "
+                "derived from the list, not stated beside it"
+            )
+        return self
 
 
 class RaceSummary(BaseModel):
@@ -52,6 +94,16 @@ class RacePredictionResponse(BaseModel):
     # the endpoint never 500s on a missing value from an older
     # committed snapshot that predates the field.
     session_datetime: str | None = None
+    # Whether this forecast was built on every season the model asked for.
+    # None is a real third state, not a default to be filled in: a prediction
+    # served from a stored snapshot or a backtest replay was built from a
+    # history load this request never made, so there is nothing to report.
+    # Defaulting that to `complete: true` would be the one value that is a
+    # lie — "nothing was skipped" is not knowable here — so it is None, and
+    # the UI reads None as silence rather than as reassurance. Nullable for
+    # the same reason as session_datetime: the committed public_snapshot.json
+    # predates this field and the public deployment serves it verbatim.
+    history: HistoryCoverage | None = None
 
 
 class SessionDriverPrediction(BaseModel):

@@ -24,6 +24,18 @@ So the cache directory is a per-session temp directory, seeded with:
     strength of being finished seasons), and
   * `tests/fixtures/jolpica/*.json`, a frozen snapshot of the 2026 season.
 
+Both are enumerated with `git ls-files`, NOT with `glob("*.json")`. A glob reads
+whatever is on disk, and `data/cache/` on a working machine holds two populations
+at once: the 312 files the repo tracks, and every cache that machine fetched for
+itself while developing — measured 372 on the one this was found on, 60 of them
+local-only including `2026_16_results.json`. Those files are invisible to a fresh
+clone, so a glob lets a test read history that exists on one machine and nowhere
+else: the same test then proves something different there than it does in CI.
+Reading git's own index instead makes the seeded cache identical everywhere,
+which is the whole point of the arrangement.
+`tests/test_cache_seed_is_tracked_only.py` plants an untracked file and asserts
+the seed leaves it out, so this paragraph is checked rather than trusted.
+
 The 2026 snapshot is a fixture rather than a cache entry on purpose. Adding it
 to `data/cache/jolpica/` would work for the test and be wrong for the app:
 `_cache_or_fetch` serves a cache hit without refetching, so a committed
@@ -41,6 +53,7 @@ from __future__ import annotations
 
 import shutil
 import socket
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -50,6 +63,42 @@ from f1_predictor.data import jolpica
 REPO = Path(__file__).resolve().parents[1]
 TRACKED_CACHE = REPO / "data" / "cache" / "jolpica"
 TEST_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "jolpica"
+
+_SEED_SOURCES = (TRACKED_CACHE, TEST_FIXTURES)
+
+
+def _tracked_files(directory: Path) -> list[str]:
+    """File names git tracks directly inside `directory`.
+
+    `git ls-files`, not `glob`: `data/cache/` is gitignored and force-added file
+    by file, so on a working machine that directory also holds every cache the
+    machine fetched for itself — 60 local-only files on the one this was found
+    on. A glob seeds those too, and a test that reads them proves something
+    here that it cannot prove on any other machine. Ask git what the repository
+    contains and the seeded cache is the same everywhere.
+
+    `ls-files` reads the index, so it is also right about files that are tracked
+    but currently absent from disk (a sparse or partial checkout): those are
+    skipped rather than raising, and the test that needed them fails with the
+    real reason instead of an opaque copy error.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", str(directory.relative_to(REPO))],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    ).stdout
+    names = (Path(entry).name for entry in listed.split("\0") if entry.endswith(".json"))
+    return [name for name in names if (directory / name).is_file()]
+
+
+def _seed_cache(cache: Path) -> None:
+    """Fill `cache` with the tracked jolpica data, and only that.
+
+    Split out of the fixture so a test can call the same code path the suite
+    runs on, rather than re-implementing it and passing for the wrong reason.
+    """
+    for source in _SEED_SOURCES:
+        for name in _tracked_files(source):
+            shutil.copy(source / name, cache / name)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -84,9 +133,7 @@ def jolpica_cache(tmp_path_factory):
     `data/cache/jolpica/` and none of them depend on what this machine
     happens to have fetched."""
     cache = tmp_path_factory.mktemp("jolpica-cache")
-    for source in (TRACKED_CACHE, TEST_FIXTURES):
-        for path in sorted(source.glob("*.json")):
-            shutil.copy(path, cache / path.name)
+    _seed_cache(cache)
 
     saved = jolpica.JOLPICA_CACHE_DIR
     jolpica.JOLPICA_CACHE_DIR = cache

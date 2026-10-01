@@ -49,7 +49,7 @@ def schedule():
 
 def _frame_for(round_: int, schedule) -> pd.DataFrame:
     row = schedule[schedule["round"] == round_].iloc[0]
-    df, _ = routes._future_feature_frame(2026, round_, row)
+    df, _tier, _coverage = routes._future_feature_frame(2026, round_, row)
     return df
 
 

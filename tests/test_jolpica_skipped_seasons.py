@@ -121,7 +121,7 @@ def test_a_season_whose_fetch_failed_is_reported_by_season_and_reason(monkeypatc
     monkeypatch.setattr(jolpica, "fetch_season_schedule", schedule)
 
     with caplog.at_level(logging.WARNING, logger="f1_predictor.data.jolpica"):
-        results_df, schedule_df = jolpica.load_history(2026)
+        results_df, schedule_df, _coverage = jolpica.load_history(2026)
 
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(warnings) == 1, f"expected exactly one warning, got {caplog.records}"

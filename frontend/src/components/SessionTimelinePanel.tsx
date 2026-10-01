@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api/client";
-import type { DriverPrediction, RaceAccuracyEntry, SessionDriverPrediction, SessionType } from "../types";
+import type { DriverPrediction, HistoryCoverage, RaceAccuracyEntry, SessionDriverPrediction, SessionType } from "../types";
 import { EmptyState, ErrorState, FixtureExplainer, Skeleton, kickoff } from "../predictor-ui";
 import { driverName } from "../lib/teamColors";
+import { HistoryCoverageNote } from "./HistoryCoverageNote";
 import { TierBadge } from "./TierBadge";
 import { TimingTower } from "./TimingTower";
 
@@ -35,6 +36,10 @@ interface SessionData {
   tier: string;
   source: string;
   predictions: SessionDriverPrediction[];
+  /** Only the race response carries it: a session forecast is built from the
+   *  current season alone, so there is no multi-season window to come up
+   *  short. Null on a session tab is a real absence, not a hidden true. */
+  history: HistoryCoverage | null;
 }
 
 /** Where the prediction on screen came from, in words — but only for the two
@@ -167,10 +172,11 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
             tier: r.tier,
             source: r.source,
             predictions: r.predictions.map(driverPredictionToSession),
+            history: r.history ?? null,
           }))
         : api
             .sessionPrediction(selected, season, round)
-            .then((r) => ({ race_name: r.race_name, tier: r.tier, source: r.source, predictions: r.predictions }));
+            .then((r) => ({ race_name: r.race_name, tier: r.tier, source: r.source, predictions: r.predictions, history: null }));
 
     request
       .then((d) => !cancelled && setData(d))
@@ -226,6 +232,12 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
       )}
       {data && !error && (
         <>
+          {/* Above the flow, not below it: when a season was skipped the whole
+              forecast is built on less history than usual, and that qualifies
+              every number on this panel — so it is said before the pick, not
+              after. Stays silent when the window was complete, and when the
+              response reports no history load at all. */}
+          <HistoryCoverageNote history={data.history} />
           {/* In plain English, above the timing tower: the one-line answer
               before the grid. The instant block states the timing, the verdict
               and the session record from the session's own predictions and the

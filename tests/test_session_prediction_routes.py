@@ -4,7 +4,18 @@ import pytest
 from fastapi import HTTPException
 
 from f1_predictor.api import routes
+from f1_predictor.data import jolpica
 from f1_predictor.public_snapshot import _session_order_for
+
+# The race-prediction stubs below stand in for `_predict_upcoming_race`, which
+# hands back the history window it loaded alongside the prediction. "Everything
+# loaded" is the honest value for a stub: nothing was skipped, because nothing
+# was fetched. Built per call rather than at import so a run against code
+# without the coverage type fails the tests rather than erroring the collection.
+def _complete_history():
+    return jolpica.HistoryCoverage(
+        seasons_requested=(2026, 2025, 2024), seasons_loaded=(2026, 2025, 2024)
+    )
 
 
 def _fake_schedule(is_sprint_weekend: bool) -> pd.DataFrame:
@@ -158,7 +169,7 @@ def test_race_prediction_carries_session_datetime(monkeypatch):
     """Race prediction carries session_datetime from race_datetime."""
     monkeypatch.setattr(routes, "_cache", {})
     monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
-    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend", _complete_history()))
 
     result = routes.get_race_prediction(2024, 5)
 
@@ -172,7 +183,7 @@ def test_race_prediction_missing_session_datetime_validates(monkeypatch):
     committed snapshot predates the field and has no session_datetime."""
     monkeypatch.setattr(routes, "_cache", {})
     monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
-    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend", _complete_history()))
 
     # Even with the field missing from the source data (simulating
     # an old snapshot dict), validation succeeds because the field
@@ -195,7 +206,7 @@ def test_race_prediction_without_session_datetime_key_in_snapshot(monkeypatch):
     — the field is optional with a None default on the schema."""
     monkeypatch.setattr(routes, "_cache", {})
     monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule(False))
-    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend"))
+    monkeypatch.setattr(routes, "_predict_upcoming_race", lambda *a: (_fake_sim(), "pre_weekend", _complete_history()))
 
     # Old snapshot dict without session_datetime key
     snap = {"season": 2024, "predictions": {"5": {"season": 2024, "round": 5, "race_name": "Fake GP",
