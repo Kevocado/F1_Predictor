@@ -102,10 +102,65 @@ describe("the instant block on an F1 session", () => {
     // Non-vacuous: the block is on screen and carries the verdict, so these
     // absences are about a rendered block, not an empty one.
     expect(within(block).getByText("Max Verstappen is the pick.")).toBeInTheDocument();
-    expect(screen.queryByTestId("pbar-fill")).toBeNull();
-    expect(screen.queryByTestId(/^tile-/)).toBeNull();
+    // Scoped to the BLOCK, deliberately, and the reason is worth writing down:
+    // the hub's block accents the bar segment matching `bundle.pick`, but F1
+    // passes no `segments`, so it draws no `pbar-fill` at all. The prediction
+    // table and the ExplainRibbon below keep their own bars — decision 8 leaves
+    // F1's per-race surface alone, and those bars are not duplication with the
+    // block. A document-wide `queryByTestId("pbar-fill")` would be asserting a
+    // different product decision; this asks the question actually in play:
+    // does the block itself draw one?
+    expect(within(block).queryByTestId("pbar-fill")).toBeNull();
+    expect(within(block).queryByTestId("pbar-legend")).toBeNull();
+    expect(within(block).queryByTestId(/^tile-/)).toBeNull();
     expect(block.innerHTML).not.toContain("market-line");
     expect(block.innerHTML).not.toContain("split-bar");
+  });
+
+  it("renders the block above the button, before anything is asked for", async () => {
+    const explain = vi.spyOn(api, "explainSession");
+    render(<SessionTimelinePanel {...props} />);
+    const block = await screen.findByTestId("instant-block");
+    const button = screen.getByRole("button", { name: /ai summary/i });
+    // Facts first, interpretation after: the block is the finished "what", so
+    // the button — and everything it costs — is below it.
+    expect(block.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // On screen before the press, and pressing it was never needed to see it.
+    // Awaited: the record arrives on its own request, so a synchronous lookup
+    // here is a race against the suite's load rather than a claim about the UI.
+    expect(await within(block).findByText("Picks made before the session")).toBeInTheDocument();
+    expect(explain).not.toHaveBeenCalled();
+  });
+
+  it("prints each figure exactly once, in the block, after the summary lands", async () => {
+    // The hub fix this pins: the summary no longer re-renders tiles, bar,
+    // legend or record — the block above it already draws each of them, and a
+    // second copy is the overlap this phase removes. Asserted DOCUMENT-WIDE,
+    // because "the block is the only place" is a claim about the whole panel,
+    // not about one subtree: a duplicate would be the summary rendering a
+    // figure the block already owns.
+    vi.spyOn(api, "raceAccuracy").mockResolvedValue([accuracy(4, false, 3, 4)]);
+    vi.spyOn(api, "explainSession").mockResolvedValue(summary("none") as never);
+    render(<SessionTimelinePanel {...props} />);
+    const block = await screen.findByTestId("instant-block");
+    await within(block).findByTestId("record-fill");
+
+    await user.click(screen.getByRole("button", { name: /ai summary/i }));
+    const summaryView = await screen.findByTestId("fixture-summary");
+    // The block is still mounted under the summary, and still comes first.
+    expect(screen.getByTestId("instant-block")).toBe(block);
+    expect(block.compareDocumentPosition(summaryView) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Every figure the block owns, exactly once, in the whole document.
+    expect(screen.getAllByText("Max Verstappen is the pick.")).toHaveLength(1);
+    expect(screen.getAllByText("Made before the session")).toHaveLength(1);
+    expect(screen.getAllByText("Picks made before the session")).toHaveLength(1);
+    expect(screen.getAllByText("3/4")).toHaveLength(1);
+    expect(screen.getAllByTestId("record-fill")).toHaveLength(1);
+    // And the figures F1 never had: absent from the block AND from the summary,
+    // which is what makes the "exactly once" above non-trivial for them.
+    expect(screen.queryAllByTestId(/^tile-/)).toHaveLength(0);
+    expect(screen.queryAllByTestId("pbar-legend")).toHaveLength(0);
   });
 
   it("states the rebuilt timing once, in the block", async () => {
@@ -115,11 +170,18 @@ describe("the instant block on an F1 session", () => {
     // header AND let the block print the same disclosure below it — two badges
     // and the same "not counted" claim in one panel. The block owns it, so the
     // badge and its sentence appear exactly once each.
-    expect(await screen.findByText("Rebuilt after the session")).toBeInTheDocument();
-    expect(
-      screen.getByText(/made after the session started, so it is shown for reference and not counted/),
-    ).toBeInTheDocument();
+    //
+    // Resolved by reading the DOM, not by reading the diff: `StatusBadge` is a
+    // bare <span> with no test id, so the count is on the rendered WORDS
+    // ("Rebuilt after the session"), which is what a reader actually sees twice.
+    const block = await screen.findByTestId("instant-block");
+    expect(within(block).getByText("Rebuilt after the session")).toBeInTheDocument();
+    // Exactly once in the whole panel: the header's own copy is gone.
     expect(screen.getAllByText("Rebuilt after the session")).toHaveLength(1);
+    // And the "not counted" claim is made once, by the block.
+    expect(
+      screen.getAllByText(/made after the session started, so it is shown for reference and not counted/),
+    ).toHaveLength(1);
     expect(screen.queryByText(/isn't counted in the track record/)).toBeNull();
   });
 
