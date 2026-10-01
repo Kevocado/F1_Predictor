@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import dataclass, field
 
 import pandas as pd
 import requests
@@ -315,8 +316,50 @@ def load_season_results(season: int, force_refresh: bool = False) -> pd.DataFram
 HISTORY_SEASONS = 3
 
 
-def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Results and schedule for `season` and the seasons before it.
+@dataclass(frozen=True)
+class SkippedSeason:
+    """A season the model asked for and did not get, and why.
+
+    `reason` is required rather than defaulted: a skip with no reason on the
+    payload is the same silence the log line used to be, moved somewhere less
+    likely to be read. The two causes are different facts — a failed fetch is
+    about this run (rate limit, connection reset, timeout) and an empty frame is
+    about the calendar — and the string is the only place that says which.
+    """
+    season: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class HistoryCoverage:
+    """What the history window actually contains, for whoever asked for it.
+
+    The third element of `load_history`'s return. It exists because the two
+    frames cannot express a short window: a window missing 2024 is the same two
+    frames as a complete one, just smaller, and the caller cannot tell. Circuit
+    form is an expanding mean over whatever arrived, so a skipped season did not
+    fail the run — it made the model quietly less informed, and the forecast it
+    produces looks identical to a normal one. Anything that serves those numbers
+    has to be able to say so.
+
+    `complete` is a derived property, never a value a caller sets: it is True iff
+    nothing was skipped. It cannot drift from `missing_seasons` beside it, and
+    there is no path that reports a complete window after dropping a season.
+    """
+    seasons_requested: tuple[int, ...]
+    seasons_loaded: tuple[int, ...]
+    missing_seasons: tuple[SkippedSeason, ...] = field(default_factory=tuple)
+
+    @property
+    def complete(self) -> bool:
+        return not self.missing_seasons
+
+
+def load_history(
+    season: int, force_refresh: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame, HistoryCoverage]:
+    """Results and schedule for `season` and the seasons before it, plus what
+    of that window actually arrived.
 
     Both frames carry a `season` column, because `features.circuit.with_circuit`
     joins on `["season", "round"]` — a schedule without it would join on a
@@ -328,13 +371,14 @@ def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame
     unavailable season should not cost a run the seasons that did load — and
     `_get` already retries a 429 with bounded backoff before it gives up, so a
     transient rate limit is normally absorbed here without a skip at all. But
-    "skipped" is not "silent": every skip below is logged at WARNING naming the
-    season and why. Silently, a rate-limited season just made the history
-    window shorter — circuit form is an expanding mean over whatever arrived,
-    so the model got quietly less informed and nothing said so.
+    "skipped" is not "silent", and it is not only a log concern: every skip is
+    recorded in the returned `HistoryCoverage`, which is what the API puts on the
+    response. The WARNING below is for whoever is watching the container; the
+    coverage is for whoever is reading the forecast, and the second audience is
+    the larger one.
     """
     seasons = [season - i for i in range(HISTORY_SEASONS) if season - i > 1950]
-    results, schedules = [], []
+    results, schedules, missing = [], [], []
     for s in seasons:
         try:
             df = load_season_results(s, force_refresh=force_refresh)
@@ -344,20 +388,29 @@ def load_history(season: int, force_refresh: bool = False) -> tuple[pd.DataFrame
             # yet": this is a statement about this run (rate limit, connection
             # reset, timeout), and it is the case that used to cost a season
             # with an INFO line nobody sees under default logging.
-            logger.warning("skipped %s history — fetch failed: %s: %s", s, type(exc).__name__, exc)
+            reason = f"fetch failed: {type(exc).__name__}: {exc}"
+            logger.warning("skipped %s history — %s", s, reason)
+            missing.append(SkippedSeason(season=s, reason=reason))
             continue
         if df.empty or sch.empty:
             # This branch had no log statement at all, so a season could leave
             # the window without a trace. Say which frame came back empty: an
             # empty schedule and empty results are different upstream problems.
             empty = "results" if df.empty else "schedule"
-            logger.warning("skipped %s history — upstream returned an empty %s frame", s, empty)
+            reason = f"upstream returned an empty {empty} frame"
+            logger.warning("skipped %s history — %s", s, reason)
+            missing.append(SkippedSeason(season=s, reason=reason))
             continue
         results.append(df.assign(season=s))
         schedules.append(sch.assign(season=s))
+    coverage = HistoryCoverage(
+        seasons_requested=tuple(seasons),
+        seasons_loaded=tuple(s for s in seasons if s not in {m.season for m in missing}),
+        missing_seasons=tuple(missing),
+    )
     if not results:
-        return pd.DataFrame(), pd.DataFrame()
-    return pd.concat(results, ignore_index=True), pd.concat(schedules, ignore_index=True)
+        return pd.DataFrame(), pd.DataFrame(), coverage
+    return pd.concat(results, ignore_index=True), pd.concat(schedules, ignore_index=True), coverage
 
 
 def load_season_qualifying(season: int, force_refresh: bool = False) -> pd.DataFrame:

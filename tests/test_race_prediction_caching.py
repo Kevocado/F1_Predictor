@@ -10,6 +10,17 @@ rebuild on a repeated request."""
 import pandas as pd
 
 from f1_predictor.api import routes
+from f1_predictor.data import jolpica
+
+# `_predict_upcoming_race` now also hands back what history window it actually
+# loaded, so the stub has to as well. "Every season loaded" is the honest value
+# here: nothing was skipped, because nothing was fetched. Built by a function
+# rather than at import so a run against code without the coverage type fails
+# the tests instead of erroring the whole collection.
+def _complete_history():
+    return jolpica.HistoryCoverage(
+        seasons_requested=(2026, 2025, 2024), seasons_loaded=(2026, 2025, 2024)
+    )
 
 
 def _fake_schedule() -> pd.DataFrame:
@@ -53,7 +64,7 @@ def test_upcoming_race_prediction_is_cached_across_requests(monkeypatch):
 
     def fake_predict_upcoming_race(season, round_, race_row):
         calls.append((season, round_))
-        return _fake_sim(), "pre_qualifying"
+        return _fake_sim(), "pre_qualifying", _complete_history()
 
     monkeypatch.setattr(routes, "_predict_upcoming_race", fake_predict_upcoming_race)
 

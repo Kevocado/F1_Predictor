@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from f1_predictor.api import routes
+from f1_predictor.data import jolpica
 
 _SEASON = 2026
 _ROUND = 1
@@ -96,7 +97,11 @@ def _fake_race_prediction(monkeypatch):
     monkeypatch.setattr(routes.jolpica, "fetch_season_schedule", lambda season: _fake_schedule())
 
     def fake_predict_upcoming_race(season, round_, race_row):
-        return _fake_sim(), "pre_qualifying"
+        # The third value is the history window this prediction was built on;
+        # nothing was skipped, because nothing was fetched.
+        return _fake_sim(), "pre_qualifying", jolpica.HistoryCoverage(
+            seasons_requested=(2026, 2025, 2024), seasons_loaded=(2026, 2025, 2024)
+        )
 
     monkeypatch.setattr(routes, "_predict_upcoming_race", fake_predict_upcoming_race)
 

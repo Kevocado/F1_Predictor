@@ -41,6 +41,8 @@ from .schemas import (
     DriverPrediction,
     ExplainResponse,
     FeatureContribution,
+    HistoryCoverage,
+    MissingSeason,
     RaceAccuracyEntry,
     RacePredictionResponse,
     RaceSummary,
@@ -180,11 +182,39 @@ def _load_models() -> tuple[str, xgb.XGBRanker | None, xgb.XGBClassifier]:
     return candidate, ranker, dnf_clf
 
 
-def _future_feature_frame(season: int, round_: int, race_row: pd.Series) -> tuple[pd.DataFrame, str]:
+def _to_history_coverage(coverage: jolpica.HistoryCoverage | None) -> HistoryCoverage | None:
+    """`jolpica.HistoryCoverage` as the API model, or None when there was no
+    history load behind this prediction.
+
+    None passes straight through rather than becoming a fabricated
+    `complete: true`: a stored snapshot or a backtest replay was built from a
+    load this request never made, and "no seasons were skipped" is not a thing
+    this payload can know.
+    """
+    if coverage is None:
+        return None
+    return HistoryCoverage(
+        complete=coverage.complete,
+        seasons_requested=list(coverage.seasons_requested),
+        seasons_loaded=list(coverage.seasons_loaded),
+        missing_seasons=[MissingSeason(season=m.season, reason=m.reason) for m in coverage.missing_seasons],
+    )
+
+
+def _future_feature_frame(
+    season: int, round_: int, race_row: pd.Series,
+) -> tuple[pd.DataFrame, str, jolpica.HistoryCoverage]:
     """The feature frame for a race that hasn't happened yet, shared by
     the prediction path and the explain path: current elo/team-strength/
     rolling-form snapshots, plus real qualifying data merged in if this
-    weekend has already qualified but not yet raced."""
+    weekend has already qualified but not yet raced.
+
+    Returns the history coverage with the frame because a frame cannot express
+    it: a complete window and one missing 2024 produce the same kind of
+    DataFrame, just a smaller one, and this function is the only place that
+    knows which one it got. The caller that serves the forecast puts it on the
+    response, so a reader is never left inferring a short window from nothing.
+    """
     tier = session_state.current_tier(race_row)
 
     schedule = jolpica.fetch_season_schedule(season)
@@ -197,7 +227,7 @@ def _future_feature_frame(season: int, round_: int, race_row: pd.Series) -> tupl
     # predictions for rounds 16 and 17 — every driver, every figure, to four
     # decimals. Measured: round 17 goes from 0/23 drivers with circuit history
     # to 22/23 once prior seasons are in the frame.
-    results_df, history_schedule = jolpica.load_history(season)
+    results_df, history_schedule, coverage = jolpica.load_history(season)
     driver_ids = jolpica.fetch_driver_standings(season)["driver_id"].tolist()
     future_df = championship_projection.build_future_feature_rows(
         season, race_schedule, results_df, history_schedule, driver_ids
@@ -214,14 +244,20 @@ def _future_feature_frame(season: int, round_: int, race_row: pd.Series) -> tupl
             # qualifying position is the best available pre-race estimate.
             future_df["grid"] = future_df["quali_position"]
 
-    return future_df, tier
+    return future_df, tier, coverage
 
 
-def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tuple[pd.DataFrame, str]:
+def _predict_upcoming_race(
+    season: int, round_: int, race_row: pd.Series,
+) -> tuple[pd.DataFrame, str, jolpica.HistoryCoverage]:
     """A race that hasn't happened yet: predicted with the production
     manifest model directly (already trained on all history through the
-    most recently completed race — no per-request retraining needed)."""
-    future_df, tier = _future_feature_frame(season, round_, race_row)
+    most recently completed race — no per-request retraining needed).
+
+    The history coverage travels with the prediction for the same reason it is
+    computed at all: this is the path that can lose a season to a rate limit,
+    and it is the path whose output a reader is shown."""
+    future_df, tier, coverage = _future_feature_frame(season, round_, race_row)
     candidate, ranker, dnf_clf = _load_models()
     if candidate == "xgb_ranker":
         scores = race_outcome.xgb_scores_for_race(ranker, future_df, build_features.FEATURE_COLUMNS)
@@ -234,7 +270,7 @@ def _predict_upcoming_race(season: int, round_: int, race_row: pd.Series) -> tup
 
     constructor_lookup = future_df.set_index("driver_id")["constructor_id"]
     sim["constructor_id"] = sim["driver_id"].map(constructor_lookup)
-    return sim, tier
+    return sim, tier, coverage
 
 
 def _tracked_or_rebuilt(rows: list[dict]) -> str:
@@ -509,7 +545,7 @@ def _race_feature_frame_for_explain(season: int, round_: int) -> tuple[pd.DataFr
         ]
         return race_df, feature_cols
 
-    future_df, _tier = _future_feature_frame(season, round_, race_row)
+    future_df, _tier, _coverage = _future_feature_frame(season, round_, race_row)
     return future_df, build_features.FEATURE_COLUMNS
 
 
@@ -573,10 +609,19 @@ def _list_races_live(season: int) -> list[RaceSummary]:
     return out
 
 
-def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, completed: bool) -> tuple[pd.DataFrame, str, str]:
+def _race_prediction_bundle(
+    season: int, round_: int, race_row: pd.Series, completed: bool,
+) -> tuple[pd.DataFrame, str, str, jolpica.HistoryCoverage | None]:
+    """The prediction frame, its tier, where it came from, and what history it
+    was built on.
+
+    The coverage is None on the completed path — a stored snapshot or a backtest
+    replay was built from a history load this request never performed, so there
+    is nothing to report, and nothing that may be reported on its behalf."""
     if completed:
         try:
-            return _completed_race_prediction(season, round_)
+            df, tier, source = _completed_race_prediction(season, round_)
+            return df, tier, source, None
         except ValueError:
             # _race_is_completed already checks for a real classification,
             # but a race can still finish (checkered flag) before jolpica
@@ -584,8 +629,8 @@ def _race_prediction_bundle(season: int, round_: int, race_row: pd.Series, compl
             # truly nothing "completed" to serve yet. Degrade to the
             # latest pre-race/post-qualifying prediction rather than 500ing.
             pass
-    sim, tier = _predict_upcoming_race(season, round_, race_row)
-    return sim, tier, "live"
+    sim, tier, coverage = _predict_upcoming_race(season, round_, race_row)
+    return sim, tier, "live", coverage
 
 
 def _title_case(driver_id: str) -> str:
@@ -649,7 +694,12 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     # while porting PL_Predictor's PUBLIC_MODE pattern here: PL_Predictor's
     # own OOM was caused by exactly this shape of per-request rebuild
     # bypassing an otherwise-present cache.
-    sim, tier, source = _cached(
+    # The coverage comes out of the SAME cached tuple as the prediction, on
+    # purpose. Re-reading it on a cache hit would report whichever history
+    # window the last caller got, which is not necessarily the one these numbers
+    # came from — the flag would describe a different run from the one the
+    # reader is looking at.
+    sim, tier, source, coverage = _cached(
         f"race_prediction_{season}_{round_}",
         lambda: _race_prediction_bundle(season, round_, race_row, completed),
         ttl=_LIVE_CACHE_TTL_SECONDS,
@@ -687,6 +737,7 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     return RacePredictionResponse(
         season=season, round=round_, race_name=race_row["race_name"], tier=tier, source=source, predictions=predictions,
         session_datetime=_iso_dt(race_row.get("race_datetime")),
+        history=_to_history_coverage(coverage),
     )
 
 

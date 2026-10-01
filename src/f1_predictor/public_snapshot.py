@@ -182,7 +182,7 @@ def _snapshot_upcoming_predictions(season: int) -> None:
             try:
                 if session_type == "race":
                     completed = routes._race_is_completed(season, round_, race_row["race_datetime"], now)
-                    sim, tier, source = routes._race_prediction_bundle(season, round_, race_row, completed)
+                    sim, tier, source, _coverage = routes._race_prediction_bundle(season, round_, race_row, completed)
                 else:
                     completed = routes._session_is_completed(season, round_, session_type, race_row, now)
                     sim, tier, source = routes._session_prediction_bundle(season, round_, race_row, session_type, completed)
