@@ -159,8 +159,14 @@ describe("the instant block on an F1 session", () => {
     expect(screen.getAllByTestId("record-fill")).toHaveLength(1);
     // And the figures F1 never had: absent from the block AND from the summary,
     // which is what makes the "exactly once" above non-trivial for them.
-    expect(screen.queryAllByTestId(/^tile-/)).toHaveLength(0);
-    expect(screen.queryAllByTestId("pbar-legend")).toHaveLength(0);
+    // Scoped to those two, as the sentence says: the picks list below them does
+    // draw a key-number tile, and it is a projection of a finishing position —
+    // not a market line. This rule is about the block and the summary not
+    // drawing one a book would have had to quote.
+    expect(within(block).queryAllByTestId(/^tile-/)).toHaveLength(0);
+    expect(within(summaryView).queryAllByTestId(/^tile-/)).toHaveLength(0);
+    expect(within(block).queryAllByTestId("pbar-legend")).toHaveLength(0);
+    expect(within(summaryView).queryAllByTestId("pbar-legend")).toHaveLength(0);
   });
 
   it("states the rebuilt timing once, in the block", async () => {

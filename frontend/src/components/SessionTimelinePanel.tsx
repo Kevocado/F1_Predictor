@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api/client";
-import type { DriverPrediction, HistoryCoverage, RaceAccuracyEntry, SessionDriverPrediction, SessionType } from "../types";
-import { EmptyState, ErrorState, FixtureExplainer, Skeleton, kickoff } from "../predictor-ui";
+import type {
+  DriverPrediction,
+  HistoryCoverage,
+  RaceAccuracyEntry,
+  SessionDriverPrediction,
+  SessionType,
+  TrackRecordResponse,
+} from "../types";
+import { EmptyState, ErrorState, FixtureExplainer, PicksList, Skeleton, kickoff } from "../predictor-ui";
 import { driverName } from "../lib/teamColors";
 import { HistoryCoverageNote } from "./HistoryCoverageNote";
+import { buildPicks, type DriverRow } from "./SessionPicks";
 import { TierBadge } from "./TierBadge";
 import { TimingTower } from "./TimingTower";
 
@@ -98,6 +106,19 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
   // yet" — loading, or unreadable — and the strip is withheld rather than
   // rendered at 0/0, so it never flashes a record that does not exist.
   const [record, setRecord] = useState<{ hits: number; settled: number } | null>(null);
+  // The per-market ledger behind the picks list's provenance lines:
+  // `GET /track-record` -> store.get_session_track_record, which groups by
+  // (session_type, tier, market) and reports n / brier / hit_rate /
+  // avg_predicted_prob per market. Null means "not read yet" or "could not be
+  // read", and both are handled the same way: every row says there is no
+  // graded record, because a row whose record failed to load is not a row with
+  // a record. It never falls back to another tier's or market's figures.
+  const [ledger, setLedger] = useState<TrackRecordResponse | null>(null);
+  // Whether the ledger request has settled. Until it has, the picks list is
+  // withheld rather than drawn with "no graded record" on every row: a record
+  // that has not been read yet is not the same claim as one that does not
+  // exist, and showing the second for the length of a request would state it.
+  const [ledgerSettled, setLedgerSettled] = useState(false);
 
   // The flow's facts: the session's own predictions, no request. The pick is
   // the highest win probability on the board; finished-ness and rightness come
@@ -132,6 +153,29 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
   }, [data]);
   const flowState = data?.predictions.some((p) => p.actual_position != null) ? "finished" : "pre-game";
 
+  // The model's own ranked calls for THIS session: which markets it has, the
+  // per-driver numbers straight off the response, and the per-market ledger
+  // behind each row. `out` is empty by construction and not by omission: F1's
+  // availability signal is session state — the set of drivers the model
+  // produced a row for — and this repo has no injury report, no entry list and
+  // no news feed to attribute an absence to (measured: zero `news` matches
+  // repo-wide, no injuries module). PicksList shows an out driver once below
+  // the lists, attributed and dated; with nothing to attribute, the honest
+  // answer is to name nobody rather than invent a source. When an
+  // availability feed does exist, this is the one line that changes.
+  const picks = useMemo(
+    () =>
+      data
+        ? buildPicks({
+            sessionType: selected,
+            drivers: data.predictions as DriverRow[],
+            ledger,
+            tier: data.tier,
+          })
+        : null,
+    [data, selected, ledger],
+  );
+
   // A weekend switch (e.g. sprint -> non-sprint) can leave `selected`
   // pointing at a session this race doesn't have -- fall back to Race
   // rather than showing a 404 for a tab that shouldn't even be selectable.
@@ -155,6 +199,33 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
       .raceAccuracy(tier, selected)
       .then((rows) => !cancelled && setRecord(tallyRecord(rows)))
       .catch(() => !cancelled && setRecord(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [tier, selected]);
+
+  // The ledger is read for the tier and session actually on screen, on the same
+  // clock as the by-race record, and it waits for the tier for the same
+  // reason: a row must never be graded by another tier's numbers. `null` first
+  // so a session switch cannot leave the previous session's record standing for
+  // a frame.
+  useEffect(() => {
+    if (!tier) return;
+    let cancelled = false;
+    setLedger(null);
+    setLedgerSettled(false);
+    api
+      .trackRecord(tier, selected)
+      .then((r) => {
+        if (cancelled) return;
+        setLedger(r);
+        setLedgerSettled(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLedger(null);
+        setLedgerSettled(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -258,6 +329,17 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
               request={() => api.explainSession(season, round, selected)}
             />
           </div>
+          {/* The model's ranked calls, below the tower and above nothing else.
+              It is built from the same response the tower reads, so the two
+              can never disagree about a number. Decision 8 leaves F1's
+              per-race surface alone: the tower keeps its own per-driver bars
+              and the explain ribbon its own, and this list is additive rather
+              than a replacement for either. */}
+          {picks && ledgerSettled && (
+            <div className="mb-4">
+              <PicksList categories={picks.categories} out={picks.out} />
+            </div>
+          )}
           <TimingTower predictions={data.predictions} season={season} round={round} sessionType={selected} />
         </>
       )}
