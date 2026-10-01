@@ -50,15 +50,16 @@ describe("SessionTimelinePanel", () => {
     expect(screen.queryByText(/Rebuilt/)).not.toBeInTheDocument();
   });
 
-  it.each(["rebuilt", "backtest"])("labels a %s prediction as rebuilt, not counted", async (source) => {
+  it.each(["rebuilt", "backtest"])("labels a %s prediction as made after the session", async (source) => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race(source));
     render(<SessionTimelinePanel {...props} />);
-    // The badge and the sentence now come from the instant block, which reads
-    // the same `pick_timing` the flow bundle carries. This panel no longer
-    // prints its own copy in the header: one badge, one claim.
-    expect(await screen.findByText("Rebuilt after the session")).toBeInTheDocument();
-    expect(screen.getAllByText("Rebuilt after the session")).toHaveLength(1);
-    expect(screen.getByText(/made after the session started, so it is shown for reference and not counted/)).toBeInTheDocument();
+    // The badge now comes from the instant block, which reads the same
+    // `pick_timing` the flow bundle carries. This panel no longer prints its
+    // own copy in the header: one badge. (predictor-ui reworded it from
+    // "Rebuilt after the session" to "Made after the session" and dropped the
+    // "not counted" claim; the `rebuilt` key is unchanged.)
+    expect(await screen.findByText("Made after the session")).toBeInTheDocument();
+    expect(screen.getAllByText("Made after the session")).toHaveLength(1);
   });
 
   it("switches session with a labelled group of toggles", async () => {
@@ -136,7 +137,10 @@ describe("the plain-English panel, reduced", () => {
   it("words a rebuilt snapshot as after the session", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race("rebuilt"));
     render(<SessionTimelinePanel {...props} />);
-    expect(await screen.findByText(/made after the session started, so it is shown for reference and not counted/)).toBeInTheDocument();
+    // The block states the moment the pick was made, in the session's own
+    // words. predictor-ui's copy is "This pick was made after the session
+    // started. Counted in the track record like any other pick."
+    expect(await screen.findByText(/This pick was made after the session started\./)).toBeInTheDocument();
   });
 
   it("makes no summary request until asked, then asks for this session", async () => {

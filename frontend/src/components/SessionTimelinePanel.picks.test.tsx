@@ -115,33 +115,41 @@ describe("Model's top calls on a race session", () => {
     }
   });
 
-  it("gives every market row its own ledger figures, with n", async () => {
+  it("gives every market row the model's own figure, and no ledger text", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race());
     render(<SessionTimelinePanel {...props} />);
     const win = await screen.findByTestId("picks-list");
-    const row = within(win).getAllByTestId("picks-row").find((r) => r.getAttribute("data-category") === "Win")!;
-    expect(row).toHaveTextContent("28% hit rate");
-    expect(row).toHaveTextContent("n=286");
-    const dnf = within(win).getAllByTestId("picks-row").find((r) => r.getAttribute("data-category") === "DNF")!;
-    // DNF's own record, not the win row's: the most likely retirement is a
-    // different market and a different number of graded rows' meaning.
-    expect(dnf).toHaveTextContent("9% hit rate");
-    expect(dnf).not.toHaveTextContent("28% hit rate");
+    const rows = within(win).getAllByTestId("picks-row");
+    const row = rows.find((r) => r.getAttribute("data-category") === "Win")!;
+    // The win row's own probability, and nothing from the ledger beside it.
+    expect(within(row).getByTestId("picks-value")).toHaveTextContent("34%");
+    expect(row).not.toHaveTextContent("hit rate");
+    expect(row).not.toHaveTextContent("n=286");
+    const dnf = rows.find((r) => r.getAttribute("data-category") === "DNF")!;
+    // DNF ranks on p_dnf, so the most likely retirement shows his own 41%.
+    expect(within(dnf).getByTestId("picks-value")).toHaveTextContent("41%");
+    for (const r of rows) expect(r.textContent ?? "").not.toMatch(/hit rate|brier|n=\d/i);
   });
 
-  it("withholds the list until the ledger has answered, rather than claiming no record", async () => {
+  it("still withholds the list until the ledger has answered, and claims no record either way", async () => {
+    // The panel keeps its existing gate: the list is not drawn while the
+    // record request is in flight. That gate used to protect the "no graded
+    // record" sentence; with that sentence gone it protects nothing on the row,
+    // but removing the gate is a behaviour change outside this change, so the
+    // gate stays and this test pins only what the rows may say.
     let release!: (r: TrackRecordResponse) => void;
     vi.spyOn(api, "racePrediction").mockResolvedValue(race());
     vi.spyOn(api, "trackRecord").mockImplementation(() => new Promise<TrackRecordResponse>((r) => (release = r)));
     render(<SessionTimelinePanel {...props} />);
     // The session's own numbers are on screen well before the ledger is.
     expect(await screen.findByTestId("tower-head")).toHaveTextContent("Win");
-    // But the list is not drawn with "no graded record" on every row: that
-    // sentence is a claim about a record that has not been read yet.
     expect(screen.queryByTestId("picks-list")).not.toBeInTheDocument();
     expect(screen.queryByText(/no graded record/i)).not.toBeInTheDocument();
     release(RACE_LEDGER);
-    expect(await screen.findByTestId("picks-list")).toHaveTextContent("n=286");
+    // Once drawn, no row claims a record at all -- not this market's, and not
+    // the absence of one.
+    const list = await screen.findByTestId("picks-list");
+    expect(list.textContent ?? "").not.toMatch(/graded record|hit rate|n=\d/i);
   });
 
   it("asks the ledger for this session's tier, not a fixed one", async () => {
@@ -151,7 +159,7 @@ describe("Model's top calls on a race session", () => {
     expect(requestedLedgers).toContainEqual(["post_qualifying", "race"]);
   });
 
-  it("draws the projection as a key number and says there is no error estimate", async () => {
+  it("draws the projection as a bare position, with no error-estimate note", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race());
     render(<SessionTimelinePanel {...props} />);
     const projection = await screen.findByText("Expected finishing position");
@@ -161,9 +169,15 @@ describe("Model's top calls on a race session", () => {
     for (const row of rows) {
       expect(row.getAttribute("data-kind")).toBe("projection");
       // A position of 2.1 drawn as a share would read "210%". It must not.
-      expect(row.textContent ?? "").not.toMatch(/\d+%/);
     }
-    expect(within(section as HTMLElement).getAllByText("no error estimate yet").length).toBe(3);
+    for (const row of rows) {
+      // A position is a place, not a share: no % and no bar on any of them.
+      expect(row.textContent ?? "").not.toMatch(/\d+%/);
+      expect(within(row).getByTestId("picks-value")).toHaveTextContent(/^\d+\.\d$/);
+      // No ±, and no sentence about there being no error estimate either.
+      expect(row.textContent ?? "").not.toContain("±");
+      expect(row.textContent ?? "").not.toMatch(/error estimate/i);
+    }
   });
 
   it("marks every market row a probability bar", async () => {
@@ -208,22 +222,20 @@ describe("Model's top calls on a qualifying session", () => {
     }
   });
 
-  it("grades pole under the pole market, whose key is not the field name", async () => {
+  it("ranks pole on p_pole, and grades nothing as DNF", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race());
     vi.spyOn(api, "sessionPrediction").mockResolvedValue(quali());
     render(<SessionTimelinePanel {...props} />);
     await screen.findByTestId("picks-list");
     await switchTo("Qualifying", ["Pole", "Top 3", "Top 10", "Expected finishing position"]);
-    const row = rowsIn("Pole")[0];
-    // p_pole grades as market "pole" (n=22, 9% hit rate), not as market
-    // "p_pole" and not under the race win record.
-    expect(row).toHaveTextContent("9% hit rate");
-    expect(row).toHaveTextContent("n=22");
+    // The Pole list ranks p_pole, which the qualifying payload carries under
+    // the field name; nothing is read from the race win column.
+    expect(within(rowsIn("Pole")[0]).getByTestId("picks-value")).toHaveTextContent("34%");
   });
 });
 
 describe("the ledger, when it cannot answer", () => {
-  it("says no graded record rather than borrowing another market's numbers", async () => {
+  it("renders a market with no graded record exactly like one with 286", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race());
     // A sprint weekend has no resolved ledger rows at all (measured: 0
     // resolved for sprint and sprint_qualifying in data/tracking.db).
@@ -235,9 +247,11 @@ describe("the ledger, when it cannot answer", () => {
     const list = screen.getByTestId("picks-list");
     const markets = within(list).getAllByTestId("picks-row").filter((r) => r.getAttribute("data-category") !== "Expected finishing position");
     expect(markets.length).toBe(12);
+    // The rows still rank, and still carry no n to invent: a market with no
+    // record borrows nothing because no row reads the ledger at all.
     for (const row of markets) {
-      expect(row).toHaveTextContent(/no graded record for/i);
-      expect(row.textContent ?? "").not.toMatch(/n=\d/);
+      expect(row.textContent ?? "").not.toMatch(/graded record|n=\d|hit rate/i);
+      expect(within(row).getByTestId("picks-value").textContent).toMatch(/\d+%/);
     }
   });
 
@@ -250,7 +264,7 @@ describe("the ledger, when it cannot answer", () => {
     expect(rowsIn("Win").length).toBe(3);
     // A ledger that cannot be read is not a page that cannot be read: the
     // ranking is the model's own and does not depend on the record.
-    expect(rowsIn("Win")[0]).toHaveTextContent(/no graded record for win yet/i);
+    expect(within(rowsIn("Win")[0]).getByTestId("picks-value")).toHaveTextContent("34%");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
