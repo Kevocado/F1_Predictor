@@ -2,11 +2,18 @@
  * The model's own top calls for one session, ranked per market.
  *
  * The list itself is the shipped `PicksList` from the vendored hub package
- * (predictor-hub #63). This file is only the F1 dialect: it decides which
- * markets a session type has, takes each row's number straight from the API,
- * and writes the provenance line from the per-market ledger. It composes no
- * confidence language of its own, so there is no sentence here that could
- * claim a price, an edge or a guarantee — no odds feed exists in this repo.
+ * (predictor-hub #63, re-synced to #69). This file is only the F1 dialect: it
+ * decides which markets a session type has and takes each row's number
+ * straight from the API. It composes no confidence language of its own, so
+ * there is no sentence here that could claim a price, an edge or a guarantee —
+ * no odds feed exists in this repo.
+ *
+ * Kevin, 2026-10-01: a top call is simple — the driver, the team and the
+ * prediction. So a row here is `{key,name,team,detail,value,kind}` and nothing
+ * else. The per-market ledger line (`n`, `brier`, `hit_rate`,
+ * `avg_predicted_prob`, or "no graded record yet") and the position row's
+ * "no error estimate" note were both true and both removed: a market with no
+ * graded record now renders exactly like one that has 286 of them.
  *
  * Four measured facts shape every decision below.
  *
@@ -31,21 +38,20 @@
  *    position MAE exists anywhere in F1_Predictor (measured: zero matches for
  *    mae/mean_absolute outside the vendored package, and no such field on
  *    `DriverPrediction` or `SessionDriverPrediction`). So the row carries no
- *    `margin` and the shipped component words it "no error estimate yet",
- *    which is a true statement; `± 0` would be a claim.
+ *    `margin`, and since 2026-10-01 it carries no sentence about the absence of
+ *    one either: it shows its position, which is what a top call is.
  *
- * 4. **Provenance is per row and per market, with its n.**
- *    `GET /track-record` -> `store.get_session_track_record` groups by
- *    (session_type, tier, market) and reports `n`, `brier`, `hit_rate` and
- *    `avg_predicted_prob` for that market only. Every row quotes its own
- *    market's figures. Where the ledger has no row for that market or tier,
- *    the row says so in words — it never borrows another market's record, and
- *    never invents an n. (Measured in `data/tracking.db`: 1320 resolved race
- *    rows and 132 qualifying rows; 0 resolved for sprint and sprint
- *    qualifying, so a sprint weekend's rows say "no graded record yet".)
+ * 4. **Provenance is gone, and with it the ledger's per-market figures.**
+ *    `GET /track-record` -> `store.get_session_track_record` still groups by
+ *    (session_type, tier, market) and still reports `n`, `brier`, `hit_rate` and
+ *    `avg_predicted_prob`, and no row reads any of it now. The rule that
+ *    enforced — a market with no graded record borrows nothing, and invents no
+ *    `n` — is now true a fortiori, since no row quotes a number from the ledger
+ *    at all. (Measured in `data/tracking.db`: 1320 resolved race rows and 132
+ *    qualifying rows; 0 resolved for sprint and sprint qualifying, which used
+ *    to read "no graded record yet" and now simply reads as any other market.)
  */
 import { MAX_ROWS_PER_CATEGORY, type OutPlayer, type PickRow } from "../predictor-ui";
-import { pct } from "../predictor-ui";
 import { driverName, teamName } from "../lib/teamColors";
 import type { SessionType, TrackRecordResponse } from "../types";
 
@@ -127,46 +133,26 @@ const ORDER: string[] = [
 const finite = (x: number | null | undefined): number | undefined =>
   typeof x === "number" && Number.isFinite(x) ? x : undefined;
 
-/** This market's own ledger row, and only that one.
+/**
+ * The per-market ledger lookup went with the row text (Kevin, 2026-10-01).
  *
- *  The API is called with the session type and tier already applied, but the
- *  tier is re-checked here: a ledger that carries several tiers must not let a
- *  pre-weekend row's record speak for a post-qualifying prediction. `session_type`
- *  is not in the response (the route strips it), so the market key plus the
- *  tier is the whole match. */
-function ledgerFor(
-  ledger: TrackRecordResponse | null,
-  market: string,
-  tier: string | null,
-): TrackRecordResponse["by_market"][number] | null {
-  if (!ledger) return null;
-  for (const row of ledger.by_market) {
-    if (row.market !== market) continue;
-    if (tier && row.tier !== tier) continue;
-    return row;
-  }
-  return null;
-}
+ *  It existed only to write `provenanceFor`, which put each market's `n`,
+ *  `brier`, `hit_rate` and `avg_predicted_prob` on the row — or, for a market
+ *  with no ledger row, said "no graded record yet". A row is now the driver, the
+ *  team and the prediction, so `ledger` and `tier` are still accepted on
+ *  `BuildPicksInput` (callers pass them; the shipped ledger is unchanged) but
+ *  nothing reads them.
+ *
+ *  The rule that lookup enforced is still true and is asserted elsewhere: a
+ *  market with no graded record never borrowed another market's numbers,
+ *  because no row carries a number from the ledger at all. A sprint weekend,
+ *  which has no resolved rows, therefore renders exactly like a race weekend.
+ *
+ *  Removed here: `ledgerFor()`, the `tier` re-check, and the `pct` import.
+ */
 
-/** The provenance line, in the caller's own figures.
- *
- *  With a ledger row: the market's hit rate, the average chance the model gave
- *  for it, the Brier score and the number of graded records behind all three —
- *  `n` travels with them, because a hit rate over 22 rows is not the same
- *  claim as one over 286 and a reader cannot see that without it.
- *
- *  Without one: the honest sentence. A sprint weekend has no resolved ledger
- *  rows at all, and a market with no graded record cannot borrow another
- *  market's numbers, so the row says so and says nothing else. */
-function provenanceFor(
-  market: string,
-  row: { n: number; brier: number; hit_rate: number; avg_predicted_prob: number } | null,
-): string {
-  if (!row) return `No graded record for ${market} yet — nothing to check it against.`;
-  return `${pct(row.hit_rate)} hit rate · ${pct(row.avg_predicted_prob)} average chance · Brier ${row.brier.toFixed(3)} · n=${row.n}`;
-}
-
-/** A driver the reader cannot rank: they have no number for this market.
+/**
+ * A driver the reader cannot rank: they have no number for this market.
  *
  *  `field` is a `PickCategory["field"]`, so it is one of the seven `p_*`
  *  columns and the lookup cannot wander onto `driver_id` or
@@ -178,8 +164,11 @@ const rankable = (row: DriverRow, field: PickCategory["field"]): number | undefi
 export interface BuildPicksInput {
   sessionType: SessionType;
   drivers: DriverRow[];
+  /** No longer read: kept so callers need not change. Since 2026-10-01 no row
+   *  quotes a ledger figure, so a `null` ledger changes nothing on the page. */
   ledger: TrackRecordResponse | null;
-  /** The tier the prediction on screen came from. Its ledger, or none. */
+  /** The tier the prediction on screen came from. No longer read: kept so
+   *  callers need not change, since no row quotes a ledger figure. */
   tier?: string | null;
   /** Drivers who are not in this session. Shown once, below the lists. */
   out?: OutPlayer[];
@@ -190,7 +179,7 @@ export interface BuiltPicks {
   out: OutPlayer[];
 }
 
-export function buildPicks({ sessionType, drivers, ledger, tier = null, out = [] }: BuildPicksInput): BuiltPicks {
+export function buildPicks({ sessionType, drivers, out = [] }: BuildPicksInput): BuiltPicks {
   // A driver named in `out` is out of this ranking, by name, before anything
   // is ranked. The out line below the lists is the only place they appear.
   const outNames = new Set(out.map((p) => p.name));
@@ -215,9 +204,9 @@ export function buildPicks({ sessionType, drivers, ledger, tier = null, out = []
           value: position,
           // A position is a place, not a share: kind "projection" is what
           // keeps PicksList from drawing it as a percentage bar. No `margin`:
-          // see fact 3 above.
+          // no per-driver position MAE exists (see fact 3), and the row shows
+          // its figure rather than a sentence about the absence of one.
           kind: "projection" as const,
-          provenance: "Position the model expects — no error estimate for this yet",
         }));
       if (rows.length > 0) categories.push({ category: label, rows });
       continue;
@@ -240,7 +229,6 @@ export function buildPicks({ sessionType, drivers, ledger, tier = null, out = []
         detail: spec.detail,
         value,
         kind: "probability" as const,
-        provenance: provenanceFor(spec.market, ledgerFor(ledger, spec.market, tier)),
       }));
 
     // A market no driver has a number for is not a category. An empty heading

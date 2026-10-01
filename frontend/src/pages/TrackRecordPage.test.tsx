@@ -39,7 +39,7 @@ describe("TrackRecordPage", () => {
     // The summary tiles judge the one pre-race session only.
     expect(screen.getByTestId("winners-called")).toHaveTextContent("1/1");
     const rows = screen.getAllByTestId("race-row");
-    expect(within(rows[1]).getByText("Rebuilt after the session")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Made after the session")).toBeInTheDocument();
     expect(within(rows[1]).queryByText(/✗/)).not.toBeInTheDocument();
   });
 

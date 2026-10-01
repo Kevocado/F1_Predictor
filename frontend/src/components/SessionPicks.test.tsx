@@ -83,6 +83,80 @@ function expectRows(categories: { rows: unknown[] }[], atLeast = 3): void {
   expect(rows.length).toBeGreaterThanOrEqual(atLeast);
 }
 
+/* ── 0 · a row is the player, the team and the prediction ─────────────────── */
+
+/**
+ * Kevin, 2026-10-01: a top call is the player, the team and the prediction.
+ * Nothing else. So no row carries a provenance sentence, a ± margin, a "no
+ * graded record" line, a Brier score, a hit rate or an `n`, and the row shows
+ * its figure rather than disclaiming what backs it.
+ *
+ * These assert on the BUILT row, not only the rendered page: the shared
+ * component stopped drawing `provenance`, and this stops the site building it.
+ */
+describe("a row is the driver, the team and the prediction", () => {
+  it("carries no provenance, no ± and no ledger text on any built row", () => {
+    const built = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
+    expectRows(built.categories);
+    for (const { rows } of built.categories) {
+      for (const row of rows) {
+        const text = Object.entries(row)
+          .filter(([k]) => !["key", "name", "team", "value", "kind"].includes(k))
+          .map(([, v]) => String(v))
+          .join(" ")
+          .toLowerCase();
+        for (const banned of ["graded record", "hit rate", "brier", "n=", "±", "error estimate", "ledger"]) {
+          expect(text, `stripped text on a built row: ${banned}`).not.toContain(banned);
+        }
+        // No provenance or margin field at all, rather than an empty one.
+        expect(row).not.toHaveProperty("provenance");
+        expect(row).not.toHaveProperty("margin");
+      }
+    }
+  });
+
+  it("says no ledger figure on the page, with or without a ledger behind it", () => {
+    for (const ledger of [RACE_LEDGER, null]) {
+      const view = render(
+        <PicksList
+          categories={buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger }).categories}
+        />,
+      );
+      const text = screen.getByTestId("picks-list").textContent!.toLowerCase();
+      for (const banned of ["graded record", "hit rate", "brier", "n=", "±", "nothing to check it against"]) {
+        expect(text, `stripped text on the page: ${banned}`).not.toContain(banned);
+      }
+      view.unmount();
+    }
+  });
+
+  it("still names the driver, the team and the figure", () => {
+    const built = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
+    const win = built.categories.find((c) => c.category === "Win")!;
+    expect(win.rows[0]).toMatchObject({ name: "Max Verstappen", kind: "probability" });
+    expect(win.rows[0].value).toBe(0.34);
+    expect(win.rows[0].team).toBeTruthy();
+
+    const view = render(<PicksList categories={built.categories} />);
+    const rendered = screen.getAllByTestId("picks-row").filter((r) => r.getAttribute("data-category") === "Win")[0];
+    expect(rendered.querySelector('[data-testid="picks-value"]')!.textContent).toBe("34%");
+    view.unmount();
+  });
+
+  it("a projection row shows the position alone, with no error-estimate note", () => {
+    const built = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
+    const view = render(<PicksList categories={built.categories} />);
+    const proj = screen
+      .getAllByTestId("picks-row")
+      .filter((r) => r.getAttribute("data-category") === PROJECTION_CATEGORY)[0];
+    expect(proj).toHaveAttribute("data-kind", "projection");
+    expect(proj.querySelector('[data-testid="picks-value"]')!.textContent).toBe("2.1");
+    expect(proj.textContent!.toLowerCase()).not.toContain("error estimate");
+    expect(proj.textContent).not.toContain("±");
+    view.unmount();
+  });
+});
+
 /* ── 1 · the session's own markets, and only those ────────────────────────── */
 
 describe("categories per session type", () => {
@@ -121,7 +195,9 @@ describe("categories per session type", () => {
       expect(built.categories.some((c) => c.category.toLowerCase().includes("dnf"))).toBe(false);
       for (const row of built.categories.flatMap((c) => c.rows)) {
         expect(row.detail).not.toBe("DNF");
-        expect(row.provenance).not.toMatch(/\bdnf\b/i);
+        // The row that once said which market it quoted now says nothing at
+        // all, so no qualifying row can carry a DNF ledger line.
+        expect(row).not.toHaveProperty("provenance");
       }
     }
   });
@@ -237,11 +313,11 @@ describe("probability vs projection", () => {
     }
   });
 
-  it("says 'no error estimate yet' rather than a zero margin when there is no MAE", () => {
+  it("carries no margin rather than a zero one, when no MAE exists", () => {
     // No per-driver position MAE exists anywhere in F1_Predictor (measured:
     // zero matches for mae/mean_absolute outside the vendored package), so a
-    // ± would be a fabricated number. The margin is left undefined and the
-    // shipped component words it.
+    // ± would be a fabricated number. The margin is absent -- and since
+    // 2026-10-01 the row says nothing about its absence either.
     const built = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
     const projection = built.categories.find((c) => c.category === "Expected finishing position");
     expect(projection).toBeDefined();
@@ -261,73 +337,73 @@ describe("probability vs projection", () => {
   });
 });
 
-/* ── 4 · per-row provenance, with its n ───────────────────────────────────── */
+/* ── 4 · the ledger reaches no row ────────────────────────────────────────── */
 
-describe("provenance", () => {
-  it("names the ledger's own figures and its n on every market row", () => {
-    const built = categoriesOf({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
-    const markets = built.filter((c) => c.category !== PROJECTION_CATEGORY);
-    expect(markets.flatMap((c) => c.rows).length).toBe(12);
-    for (const category of markets) {
-      for (const row of category.rows) expect(row.provenance).toMatch(/n=286/);
+/**
+ * Kevin, 2026-10-01: the per-market ledger line is gone from every row. What it
+ * used to guarantee is still guaranteed, and more strongly: no row carries any
+ * figure from any market's ledger, so none can borrow another's record or invent
+ * an `n`. These tests hold that rather than the removed wording.
+ */
+describe("the ledger reaches no row", () => {
+  /** Every string a built row carries beyond name, team and figure. */
+  const rowExtras = (row: Record<string, unknown>): string =>
+    Object.entries(row)
+      .filter(([k]) => !["key", "name", "team", "value", "kind"].includes(k))
+      .map(([, v]) => String(v))
+      .join(" ");
+
+  const marketRows = (built: ReturnType<typeof buildPicks>) =>
+    built.categories.filter((c) => c.category !== PROJECTION_CATEGORY).flatMap((c) => c.rows);
+
+  it("no market row carries any of its ledger's figures or its n", () => {
+    const markets = marketRows(buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER }));
+    expect(markets).toHaveLength(12);
+    for (const row of markets) {
+      const text = rowExtras(row as unknown as Record<string, unknown>);
+      expect(text).not.toMatch(/hit rate|brier|n=|graded/i);
+      expect(row).not.toHaveProperty("provenance");
     }
   });
 
-  it("gives the projection row its own words, never a market's n", () => {
+  it("a market row is the same whichever ledger is behind it, and whichever tier", () => {
+    // The rule this replaces: no market borrows another market's record, and no
+    // tier borrows another's. Now no row reads the ledger at all, so the rows
+    // are byte-identical across all three.
+    const withRace = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
+    const withEmpty = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: { n_resolved: 0, by_market: [] } });
+    const otherTier = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER, tier: "pre_weekend" });
+    const noLedger = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: null });
+    const shape = (b: typeof withRace) => b.categories.map((c) => [c.category, c.rows.map((r) => [r.name, r.value, r.kind])]);
+    expect(shape(withEmpty)).toEqual(shape(withRace));
+    expect(shape(otherTier)).toEqual(shape(withRace));
+    expect(shape(noLedger)).toEqual(shape(withRace));
+  });
+
+  it("the projection row borrows no market's n, and says no error estimate", () => {
     const projection = categoriesOf({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER })
       .find((c) => c.category === PROJECTION_CATEGORY)!;
     expect(projection.rows.length).toBe(3);
     for (const row of projection.rows) {
-      // expected_position is not a graded market, so quoting a ledger n here
-      // would be borrowing a record from a different unit of analysis.
-      expect(row.provenance).not.toMatch(/n=\d/);
-      expect(row.provenance).toMatch(/no error estimate/i);
+      expect(rowExtras(row as unknown as Record<string, unknown>)).not.toMatch(/n=\d|error estimate|graded/i);
+      expect(row).not.toHaveProperty("provenance");
+      expect(row).not.toHaveProperty("margin");
     }
   });
 
-  it("uses that market's ledger, not another market's", () => {
-    const byCategory = Object.fromEntries(
-      categoriesOf({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER }).map((c) => [c.category, c.rows[0].provenance]),
-    );
-    expect(byCategory["Win"]).toMatch(/28% hit rate/);
-    expect(byCategory["Win"]).not.toMatch(/51% hit rate/);
-    expect(byCategory["Podium"]).toMatch(/51% hit rate/);
-    expect(byCategory["DNF"]).toMatch(/9% hit rate/);
-  });
-
-  it("says so in words when the ledger has no record for that market", () => {
-    // A sprint weekend has no resolved ledger rows at all (measured:
-    // sprint 0 resolved, sprint_qualifying 0 resolved in data/tracking.db), so
-    // the honest row says there is no graded record, and never borrows the
-    // race ledger's numbers.
-    const built = buildPicks({ sessionType: "sprint", drivers: RACE_DRIVERS, ledger: { n_resolved: 0, by_market: [] } });
-    const markets = built.categories.filter((c) => c.category !== PROJECTION_CATEGORY);
-    expect(markets.flatMap((c) => c.rows).length).toBe(12);
-    for (const row of markets.flatMap((c) => c.rows)) {
-      // The market is named, so the reader knows WHICH record is missing, and
-      // no n is printed next to a figure nobody graded.
-      expect(row.provenance).toMatch(/no graded record for (win|podium|points_finish|dnf) yet/i);
-      expect(row.provenance).not.toMatch(/n=\d/);
+  it("a market with no graded record renders the same as one with 286 of them", () => {
+    // A sprint weekend has no resolved ledger rows at all (measured: sprint 0
+    // resolved, sprint_qualifying 0 resolved in data/tracking.db). It used to
+    // read "no graded record for win yet"; it now reads as any other market.
+    const sprint = buildPicks({ sessionType: "sprint", drivers: RACE_DRIVERS, ledger: { n_resolved: 0, by_market: [] } });
+    const markets = marketRows(sprint);
+    expect(markets).toHaveLength(12);
+    for (const row of markets) {
+      const text = rowExtras(row as unknown as Record<string, unknown>);
+      expect(text).not.toMatch(/graded|n=|hit rate/i);
+      // The figure the model produced is still there, unrounded.
+      expect(typeof row.value).toBe("number");
     }
-  });
-
-  it("does not take a ledger row from another tier", () => {
-    // The ledger above holds only post_qualifying rows, and the prediction on
-    // screen is pre_weekend: a pre-weekend row must not be told the
-    // post-qualifying record's hit rate, because it is a different tier's.
-    const built = buildPicks({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER, tier: "pre_weekend" });
-    const markets = built.categories.filter((c) => c.category !== PROJECTION_CATEGORY);
-    expect(markets.flatMap((c) => c.rows).length).toBe(12);
-    for (const row of markets.flatMap((c) => c.rows)) {
-      expect(row.provenance).not.toMatch(/n=286/);
-      expect(row.provenance).toMatch(/no graded record for /i);
-    }
-  });
-
-  it("reads the ledger's avg predicted chance beside its hit rate", () => {
-    const win = categoriesOf({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER })[0];
-    expect(win.rows[0].provenance).toMatch(/28% hit rate/);
-    expect(win.rows[0].provenance).toMatch(/27% average/);
   });
 });
 
@@ -419,7 +495,7 @@ describe("rendered through the shipped PicksList", () => {
     expect(headings).toEqual(["Win", "Podium", "Points finish", "DNF", "Expected finishing position"]);
   });
 
-  it("renders every row as a probability bar, and the projection as a key number", () => {
+  it("renders every row as a probability bar, and the projection as a bare number", () => {
     renderList({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
     for (const row of screen.getAllByTestId("picks-row")) {
       const kind = row.getAttribute("data-kind");
@@ -427,15 +503,21 @@ describe("rendered through the shipped PicksList", () => {
     }
     const projection = screen.getAllByTestId("picks-row").find((r) => r.getAttribute("data-kind") === "projection");
     expect(projection).toBeDefined();
-    // The ± is worded, not drawn as a zero.
-    expect(within(projection!).getByText("no error estimate yet")).toBeInTheDocument();
+    // The projection is its own figure and nothing else: no ±, and no sentence
+    // about there being no error estimate.
+    expect(within(projection!).getByTestId("picks-value")).toHaveTextContent("2.1");
+    expect(projection!.textContent).not.toContain("±");
+    expect(projection!.textContent!.toLowerCase()).not.toContain("error estimate");
+    // A probability row draws a share bar; a projection must not.
+    expect(within(projection!).queryByTestId("picks-bar")).toBeNull();
   });
 
-  it("puts each row's provenance on the page, with its n", () => {
+  it("prints no n and no ledger figure anywhere on the page", () => {
     renderList({ sessionType: "race", drivers: RACE_DRIVERS, ledger: RACE_LEDGER });
     const rows = screen.getAllByTestId("picks-row");
     const winRow = rows.find((r) => r.getAttribute("data-category") === "Win")!;
-    expect(winRow).toHaveTextContent("n=286");
+    expect(winRow).not.toHaveTextContent("n=286");
+    expect(document.body.textContent ?? "").not.toMatch(/hit rate|brier|graded record/i);
   });
 
   it("shows the out driver once, below the lists, and out of every ranking", () => {

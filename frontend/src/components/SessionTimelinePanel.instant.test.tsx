@@ -174,21 +174,17 @@ describe("the instant block on an F1 session", () => {
     render(<SessionTimelinePanel {...props} />);
     // This panel used to print its own `Rebuilt after the session` badge in the
     // header AND let the block print the same disclosure below it — two badges
-    // and the same "not counted" claim in one panel. The block owns it, so the
-    // badge and its sentence appear exactly once each.
+    // in one panel. The block owns it, so the badge appears exactly once.
     //
     // Resolved by reading the DOM, not by reading the diff: `StatusBadge` is a
     // bare <span> with no test id, so the count is on the rendered WORDS
-    // ("Rebuilt after the session"), which is what a reader actually sees twice.
+    // ("Made after the session"), which is what a reader actually sees twice.
+    // (predictor-ui reworded the badge from "Rebuilt after …" to "Made after
+    // …" and dropped the "not counted" claim; the `rebuilt` key is unchanged.)
     const block = await screen.findByTestId("instant-block");
-    expect(within(block).getByText("Rebuilt after the session")).toBeInTheDocument();
+    expect(within(block).getByText("Made after the session")).toBeInTheDocument();
     // Exactly once in the whole panel: the header's own copy is gone.
-    expect(screen.getAllByText("Rebuilt after the session")).toHaveLength(1);
-    // And the "not counted" claim is made once, by the block.
-    expect(
-      screen.getAllByText(/made after the session started, so it is shown for reference and not counted/),
-    ).toHaveLength(1);
-    expect(screen.queryByText(/isn't counted in the track record/)).toBeNull();
+    expect(screen.getAllByText("Made after the session")).toHaveLength(1);
   });
 
   it("keeps the unverified badge when the schedule gave no start time", async () => {
