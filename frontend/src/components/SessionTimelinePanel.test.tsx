@@ -14,6 +14,14 @@ import type { HistoryCoverage, RacePredictionResponse } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
 
+beforeEach(() => {
+  // The panel reads the by-race accuracy for its strip. Stubbed here rather
+  // than left to the fetch trap in src/test/setup.ts, so no test in this file
+  // issues a request it does not mean to. The record itself is asserted in
+  // SessionTimelinePanel.instant.test.tsx.
+  vi.spyOn(api, "raceAccuracy").mockResolvedValue([]);
+});
+
 function race(source: string, history?: HistoryCoverage): RacePredictionResponse {
   return {
     season: 2026, round: 5, race_name: "Miami Grand Prix", tier: "post_qualifying", source: source as never,
@@ -45,8 +53,12 @@ describe("SessionTimelinePanel", () => {
   it.each(["rebuilt", "backtest"])("labels a %s prediction as rebuilt, not counted", async (source) => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race(source));
     render(<SessionTimelinePanel {...props} />);
+    // The badge and the sentence now come from the instant block, which reads
+    // the same `pick_timing` the flow bundle carries. This panel no longer
+    // prints its own copy in the header: one badge, one claim.
     expect(await screen.findByText("Rebuilt after the session")).toBeInTheDocument();
-    expect(screen.getByText(/isn't counted in the track record/)).toBeInTheDocument();
+    expect(screen.getAllByText("Rebuilt after the session")).toHaveLength(1);
+    expect(screen.getByText(/made after the session started, so it is shown for reference and not counted/)).toBeInTheDocument();
   });
 
   it("switches session with a labelled group of toggles", async () => {
@@ -96,27 +108,32 @@ describe("the plain-English panel, reduced", () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
     render(<SessionTimelinePanel {...props} />);
     const flow = await screen.findByTestId("fixture-flow");
-    // Non-vacuous: the pick and its probability render, so the absences below
-    // are about a rendered panel, not an empty one.
-    expect(flow).toHaveTextContent(/Max Verstappen/);
-    expect(flow).toHaveTextContent(/win probability/);
+    // The pick is legible before anything is asked for. It is the block's
+    // verdict now, not a flow sentence: saying it in both would put one fact on
+    // the page twice (spec §F).
+    const block = await screen.findByTestId("instant-block");
+    expect(within(block).getByText("Max Verstappen is the pick.")).toBeInTheDocument();
     expect(flow.innerHTML).not.toContain("market-line");
     expect(flow.innerHTML).not.toContain("split-bar");
     expect(flow.innerHTML).not.toContain("market line");
+    // The flow no longer restates the pick, the probabilities or the timing.
+    expect(flow.innerHTML).not.toContain("The model picks");
+    expect(flow.innerHTML).not.toContain("win probability");
+    expect(flow.innerHTML).not.toContain("before the session");
   });
 
   it("words the moment as the session, never a kickoff", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
     render(<SessionTimelinePanel {...props} />);
-    const flow = await screen.findByTestId("fixture-flow");
-    expect(flow).toHaveTextContent("before the session");
-    expect(flow.innerHTML).not.toContain("kickoff");
+    const block = await screen.findByTestId("instant-block");
+    expect(block).toHaveTextContent("before the session");
+    expect(block.innerHTML).not.toContain("kickoff");
   });
 
   it("words a rebuilt snapshot as after the session", async () => {
     vi.spyOn(api, "racePrediction").mockResolvedValue(race("rebuilt"));
     render(<SessionTimelinePanel {...props} />);
-    expect(await screen.findByText("The pick was made after the session started.")).toBeInTheDocument();
+    expect(await screen.findByText(/made after the session started, so it is shown for reference and not counted/)).toBeInTheDocument();
   });
 
   it("makes no summary request until asked, then asks for this session", async () => {
@@ -191,7 +208,7 @@ describe("a season the model never got", () => {
     // Non-vacuous: the tower renders, so the absence of any suppression above is
     // about a shortened forecast, not an empty panel.
     expect(screen.getByText("Max Verstappen")).toBeInTheDocument();
-    expect(screen.getByTestId("fixture-flow")).toHaveTextContent(/Max Verstappen/);
+    expect(screen.getByTestId("instant-block")).toHaveTextContent(/Max Verstappen/);
   });
 
   it("stays quiet when every season loaded", async () => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api/client";
-import type { DriverPrediction, HistoryCoverage, SessionDriverPrediction, SessionType } from "../types";
-import { EmptyState, ErrorState, FixtureExplainer, Skeleton, StatusBadge, kickoff } from "../predictor-ui";
+import type { DriverPrediction, HistoryCoverage, RaceAccuracyEntry, SessionDriverPrediction, SessionType } from "../types";
+import { EmptyState, ErrorState, FixtureExplainer, Skeleton, kickoff } from "../predictor-ui";
 import { driverName } from "../lib/teamColors";
 import { HistoryCoverageNote } from "./HistoryCoverageNote";
 import { TierBadge } from "./TierBadge";
@@ -42,20 +42,42 @@ interface SessionData {
   history: HistoryCoverage | null;
 }
 
-// Where the prediction on screen came from, in words. Only a snapshot made
-// before the session is ever counted; a rebuilt one (a late snapshot, or a
-// no-lookahead backtest of a session never snapshotted) is labelled.
+/** Where the prediction on screen came from, in words — but only for the two
+ *  sources the instant block does not already state.
+ *
+ *  A rebuilt or backtest snapshot used to print its own badge and its own
+ *  sentence in this header, and the block prints the same disclosure a few
+ *  lines below it: two `Rebuilt after the session` badges and the same "not
+ *  counted" claim inside one panel, in two components that cannot see each
+ *  other. The block owns the timing now (it reads the same `pick_timing` the
+ *  flow bundle carries), so those two sources return nothing here rather than
+ *  saying it twice. `tracked` and the fallback stay: the block states WHEN a
+ *  pick was made, not WHICH tier's snapshot is on screen. */
 function Source({ source }: { source: string }) {
-  if (source === "rebuilt" || source === "backtest") {
-    return (
-      <div className="flex flex-col items-end gap-1 text-right">
-        <StatusBadge status="rebuilt" moment="the session" />
-        <span className="max-w-xs text-xs text-pr-text-dim">Built after this session ran, so it isn't counted in the track record.</span>
-      </div>
-    );
-  }
+  if (source === "rebuilt" || source === "backtest") return null;
   if (source === "tracked") return <span className="text-xs font-semibold text-pr-win">Snapshot made before the session</span>;
   return <span className="text-xs text-pr-text-dim">Latest model, updated through the weekend</span>;
+}
+
+/** The session record as the two numbers the block's strip is built from.
+ *
+ *  `rebuilt` is the entire reason this is a tally and not a `reduce`: a session
+ *  whose only snapshot was written after it ran was never a pick made before
+ *  the session, so it contributes to NEITHER sum. Keeping its `win_of` in the
+ *  denominator while dropping its `win_hits` from the numerator would book the
+ *  session as a miss — the one outcome the field exists to prevent, and the one
+ *  the spec's honesty rule ("only a pick made before the start counts") rules
+ *  out. The session is still shown on the track-record page; it is simply not
+ *  evidence here. */
+function tallyRecord(rows: RaceAccuracyEntry[]): { hits: number; settled: number } {
+  let hits = 0;
+  let settled = 0;
+  for (const row of rows) {
+    if (row.rebuilt) continue;
+    hits += row.win_hits;
+    settled += row.win_of;
+  }
+  return { hits, settled };
 }
 
 interface Props {
@@ -72,6 +94,10 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
   const [data, setData] = useState<SessionData | null>(null);
   const [error, setError] = useState<"missing" | "failed" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // The session record the block's strip reads. `null` means "nothing to say
+  // yet" — loading, or unreadable — and the strip is withheld rather than
+  // rendered at 0/0, so it never flashes a record that does not exist.
+  const [record, setRecord] = useState<{ hits: number; settled: number } | null>(null);
 
   // The flow's facts: the session's own predictions, no request. The pick is
   // the highest win probability on the board; finished-ness and rightness come
@@ -115,6 +141,24 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round, isSprintWeekend]);
+
+  // The record is about the tier and the session on screen, so it waits for the
+  // session's own response to say which tier that is, and re-reads when the
+  // reader switches. `setRecord(null)` first, deliberately: the strip disappears
+  // rather than showing the previous session's tally for a frame.
+  const tier = data?.tier ?? null;
+  useEffect(() => {
+    if (!tier) return;
+    let cancelled = false;
+    setRecord(null);
+    api
+      .raceAccuracy(tier, selected)
+      .then((rows) => !cancelled && setRecord(tallyRecord(rows)))
+      .catch(() => !cancelled && setRecord(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [tier, selected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,15 +239,22 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
               response reports no history load at all. */}
           <HistoryCoverageNote history={data.history} />
           {/* In plain English, above the timing tower: the one-line answer
-              before the grid. The flow renders from the session's own
-              predictions with no request; the AI summary sits behind the
-              button and costs nothing until a reader asks. Reduced by what
-              the facts carry: F1 has no market line, so no line is named. */}
+              before the grid. The instant block states the timing, the verdict
+              and the session record from the session's own predictions and the
+              by-race accuracy endpoint, with no request; the AI summary sits
+              behind the button and costs nothing until a reader asks. Reduced
+              by what the facts carry: F1 has no market line, so no tile and no
+              bar are passed (decision 8 — its insight stays per-race, in the
+              tower and the table below). */}
           <div className="mb-4">
             <FixtureExplainer
               sport="f1"
               state={flowState}
               bundle={flowBundle}
+              extras={{
+                record: record ? { label: "Picks made before the session", ...record } : undefined,
+                moment: "the session",
+              }}
               request={() => api.explainSession(season, round, selected)}
             />
           </div>
