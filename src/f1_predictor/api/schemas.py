@@ -179,11 +179,81 @@ class TrackRecordEntry(BaseModel):
     avg_predicted_prob: float
 
 
-class TrackRecordResponse(BaseModel):
+class TrackRecordSubset(BaseModel):
+    """The secondary figure: the same ledger over the picks made BEFORE the
+    session started.
+
+    A whole sub-record rather than three loose numbers, so the pre-session
+    figure carries its own n and its own per-market rows exactly as the
+    headline does. Its `n_resolved` is the size of that subset by
+    construction -- it is the same summariser over the same counted rows,
+    filtered by the derivation in `tracking.store.made_before_session`, not a
+    figure reconciled by hand.
+    """
+
     n_resolved: int
     by_market: list[TrackRecordEntry]
-    # Sessions whose only snapshot was written after they started: left out.
+
+
+class TrackRecordPick(BaseModel):
+    """One recorded pick, with when it was made.
+
+    Disclosure is per pick, not only in aggregate. `made_before_session` is
+    derived on every read from this row's own `snapshotted_at` against its own
+    `session_time`, compared as UTC instants and failing closed to False, and
+    BOTH timestamps are published beside it so a reader can check the
+    comparison rather than take it on trust. The stored `backfilled` column is
+    neither consulted nor published: a stored flag is what this rule exists to
+    rule out.
+
+    A grand prix is a weekend, not a kickoff -- hence `session_time` and
+    `made_before_session` rather than borrowed kickoff language.
+    """
+
+    season: int
+    round: int
+    race_name: str | None = None
+    session_type: str
+    tier: str
+    driver_id: str
+    market: str
+    predicted_prob: float
+    actual_outcome: int
+    made_before_session: bool
+    snapshotted_at: str
+    session_time: str
+    # False for a rerun that lost the earliest-pick contest.
+    counted: bool = True
+
+
+class TrackRecordResponse(BaseModel):
+    """The track record: every recorded pick, and the pre-session subset.
+
+    `n_resolved` and `by_market` keep their names and their meaning as
+    "resolved picks in the record". What changed on 2026-10-01
+    (predictor-hub #66) is WHICH resolved picks that is: the headline is every
+    counted pick -- one per (session, driver, market), the earliest recorded,
+    whenever it was made -- where it used to be the sessions every row of which
+    was snapshotted before it started.
+    """
+
+    n_resolved: int
+    by_market: list[TrackRecordEntry]
+    # The pre-session subset beside the headline: what the model would have said
+    # on the weekend. The figure to read for live performance.
+    pre_session: TrackRecordSubset
+    # The two counts behind the reconciliation, for a one-number read:
+    # n_resolved == n_pre_session + n_post_session_picks.
+    n_pre_session: int = 0
+    n_post_session_picks: int = 0
+    # RENAMED IN MEANING, name and unit kept: this used to count sessions LEFT
+    # OUT of the record. It is now the number of sessions with at least one
+    # counted pick recorded at or after their own start -- the disclosure, not
+    # the exclusion. Nothing is withheld by it any more.
     n_rebuilt_sessions: int = 0
+    # Every recorded pick, counted or not, with its own timestamps and its own
+    # pre-session label.
+    per_pick: list[TrackRecordPick] = []
 
 
 class FeatureContribution(BaseModel):
