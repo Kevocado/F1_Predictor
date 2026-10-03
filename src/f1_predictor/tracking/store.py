@@ -595,6 +595,82 @@ def get_session_prediction(season: int, round_: int, session_type: str, tier: st
     return df.to_dict(orient="records")
 
 
+def get_probability_buckets(bounds: list[tuple[float, float]]) -> list[dict]:
+    """`session_predictions` grouped into probability bands, over RESOLVED rows.
+
+    The banding is a caller-supplied list of `(low, high)` pairs and the SQL
+    `CASE` is generated from it, so there is exactly one definition of a band
+    anywhere in this repo: the adapter that reads the table and the test that
+    re-derives it from the committed blob are handed the same list, and a band
+    edge cannot be moved in one place and not the other.
+
+    Half-open `[low, high)` except the last band, which is closed so the highest
+    edge cannot drop a row. `bounds` is assumed sorted and contiguous; the
+    generated `WHEN`s follow its order.
+
+    Returns one dict per band, ascending by `low`, each:
+      `low`, `high`   the band's own edges -- **these are the join key**, so a
+                      caller matches a probability to its band numerically rather
+                      than through a formatted string. `label` below is for
+                      humans and is deliberately not what anything is matched on:
+                      a label that is compared as text is a label whose format can
+                      drift out of step with the numbers.
+      `label`         the band's own text, e.g. "0.5-0.6"
+      `n`             how many resolved rows fell in it
+      `hits`          how many of those resolved positive
+      `rate`          hits / n, or None when n is 0 (never 0.0: an empty band says
+                      nothing, and 0.0 would read as a measured miss)
+      `mean_predicted` mean `predicted_prob` over the band, which is the number
+                      the realised rate is compared against to measure calibration
+      `as_of`         latest `resolved_at` in the band -- when the record was last
+                      brought up to date by a result
+      `n_resolved`    resolved rows in the WHOLE table, so a caller can tell a
+                      thin record from a thin band
+
+    Bands with `n == 0` are omitted entirely rather than carried as empties:
+    "no data, no row" (spec §2) starts here, one layer below the renderer.
+    """
+    if not bounds:
+        return []
+    # Group by each band's LOW edge: the WHEN arms carry the low of the band they
+    # open, and the final ELSE carries the last band's, so the grouping key is a
+    # number rather than a formatted string.
+    whens = " ".join(
+        f"WHEN predicted_prob < {high!r} THEN {low!r}"
+        for low, high in bounds[:-1]
+    )
+    query = (
+        "SELECT CASE " + whens + f" ELSE {bounds[-1][0]!r} END AS low, "
+        "COUNT(*) AS n, COALESCE(SUM(actual_outcome), 0) AS hits, "
+        "AVG(predicted_prob) AS mean_predicted, MAX(resolved_at) AS as_of "
+        "FROM session_predictions WHERE resolved = 1 AND predicted_prob IS NOT NULL "
+        "GROUP BY low"
+    )
+    with _connect() as conn:
+        rows = conn.execute(query).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM session_predictions "
+            "WHERE resolved = 1 AND predicted_prob IS NOT NULL"
+        ).fetchone()[0]
+
+    high_of = {low: high for low, high in bounds}
+    out = []
+    for low, n, hits, mean_predicted, as_of in rows:
+        high = high_of[low]
+        out.append({
+            "low": low,
+            "high": high,
+            "label": f"{low:.1f}-{high:.1f}",
+            "n": int(n),
+            "hits": int(hits),
+            "rate": (int(hits) / int(n)) if n else None,
+            "mean_predicted": None if mean_predicted is None else float(mean_predicted),
+            "as_of": as_of,
+            "n_resolved": int(total),
+        })
+    return sorted(out, key=lambda row: row["low"])
+
+
 def get_championship_history(season: int, championship: str) -> pd.DataFrame:
     with _connect() as conn:
         return pd.read_sql(

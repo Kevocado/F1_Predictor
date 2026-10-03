@@ -19,6 +19,7 @@ from ..config import FRONTEND_DIST_DIR, PUBLIC_MODE, PUBLIC_SNAPSHOT_POLL_SECOND
 from .explain import router as explain_router
 from .facts import router as facts_router
 from .routes import refresh_public_snapshot_from_remote, router
+from .signals import router as signals_router
 
 
 async def _public_snapshot_poll_loop():
@@ -71,6 +72,11 @@ app.include_router(router)
 # router carries no /api prefix. /facts/upcoming is declared before
 # /facts/{session_id} inside facts.py so it isn't swallowed by the path param.
 app.include_router(facts_router)
+# GET /signals/{session_id} — spec §3's per-fixture signal payloads, rendered by
+# the shared SignalRows component. Declared after facts_router for the same
+# reason facts_router is ordered that way: both are read through the explainer,
+# and neither carries an /api prefix.
+app.include_router(signals_router)
 # The shared explainer serves f1 now (the old refusal was about the win
 # probability, not the race story), so the session page gets its summary
 # through this proxy rather than living without one.
