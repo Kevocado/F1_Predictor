@@ -501,21 +501,36 @@ def get_facts_upcoming(hours: int = 72) -> dict:
     return {"ids": ids}
 
 
-@router.get("/facts/{session_id}")
-def get_facts(session_id: str) -> dict:
-    now = _now()
-    parsed = parse_session_id(session_id)
-    if parsed is None:
-        raise HTTPException(status_code=404, detail=f"Unknown session id: {session_id}")
-    season, round_, session = parsed
+def session_id_of(season: int, round_: int, session: str) -> str:
+    """`'2026-15-race'` — the id shape `parse_session_id` reads back."""
+    return f"{season}-{round_}-{session}"
 
+
+def session_pick(season: int, round_: int, session: str, now: datetime | None = None) -> dict:
+    """The session's headline pick, and everything the decision to make it was
+    taken from. Raises 404 when the session is unknown.
+
+    Split out of `get_facts` so `GET /signals/{session_id}` can quote the SAME
+    probability this bundle shows. `trust` names the confidence the model is
+    quoting (spec §4: "when this model says ~59%"), so that number has to be the
+    one on the page — and the rule that decides it, that a STARTED session is
+    described only by what was stored before it began, is the rule most likely to
+    be got subtly wrong by a second reader. One owner, two callers.
+
+    Deliberately does NOT compute contributors, and that is what lets the signals
+    endpoint call this at all: `_contributors_for` builds race feature frames and
+    can be slow or fail outright, and a signal that is a COUNT over a stored
+    table has no business depending on the live feature pipeline.
+    """
     prediction = _current_prediction(season, round_, session)
     stored_rows = _stored_rows(season, round_, session)
     stored = _stored_by_driver(stored_rows)
     if prediction is None and not stored:
-        raise HTTPException(status_code=404, detail=f"Unknown session id: {session_id}")
+        raise HTTPException(
+            status_code=404, detail=f"Unknown session id: {session_id_of(season, round_, session)}"
+        )
 
-    status = _status(prediction, now, stored_rows)
+    status = _status(prediction, now or _now(), stored_rows)
     started = status in ("live", "final")
 
     # THE RULE: a started session is described only by what was stored before
@@ -527,12 +542,6 @@ def get_facts(session_id: str) -> dict:
         store.made_before_session(row.get("snapshotted_at"), row.get("session_time"))
         for row in stored_rows
     )
-    if started:
-        source = stored if stored else None
-        source_source = {"source": "tracked"} if stored_tracked else {"source": "rebuilt"}
-    else:
-        source = prediction
-        source_source = {"source": (prediction or {}).get("source")}
 
     names = _name_by_driver(prediction) if prediction else {}
     for driver_id in stored:
@@ -557,6 +566,41 @@ def get_facts(session_id: str) -> dict:
             pick = {"label": drivers[0].get("name"), "prob": _num(drivers[0][headline_key])}
     if pick is None:
         pick_timing = "none"
+
+    return {
+        "prediction": prediction,
+        "stored_rows": stored_rows,
+        "stored": stored,
+        "stored_tracked": stored_tracked,
+        "names": names,
+        "status": status,
+        "started": started,
+        "pick": pick,
+        "pick_timing": pick_timing,
+    }
+
+
+@router.get("/facts/{session_id}")
+def get_facts(session_id: str) -> dict:
+    now = _now()
+    parsed = parse_session_id(session_id)
+    if parsed is None:
+        raise HTTPException(status_code=404, detail=f"Unknown session id: {session_id}")
+    season, round_, session = parsed
+
+    ctx = session_pick(season, round_, session, now)
+    prediction, stored_rows = ctx["prediction"], ctx["stored_rows"]
+    stored = ctx["stored"]
+    status, started = ctx["status"], ctx["started"]
+    pick, pick_timing = ctx["pick"], ctx["pick_timing"]
+    names = ctx["names"]
+
+    if started:
+        source = stored if stored else None
+        source_source = {"source": "tracked"} if ctx["stored_tracked"] else {"source": "rebuilt"}
+    else:
+        source = prediction
+        source_source = {"source": (prediction or {}).get("source")}
 
     # Contributors explain a *forecast*; for a finished session today's model
     # would explain it with the result already in its features, so they are

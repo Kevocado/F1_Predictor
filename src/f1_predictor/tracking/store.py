@@ -595,6 +595,92 @@ def get_session_prediction(season: int, round_: int, session_type: str, tier: st
     return df.to_dict(orient="records")
 
 
+def get_probability_buckets(bounds: list[tuple[float, float]]) -> list[dict]:
+    """`session_predictions` grouped into probability bands, over RESOLVED rows.
+
+    The banding is a caller-supplied list of `(low, high)` pairs and the SQL
+    `CASE` is generated from it, so there is exactly one definition of a band
+    anywhere in this repo: the adapter that reads the table and the test that
+    re-derives it from the committed blob are handed the same list, and a band
+    edge cannot be moved in one place and not the other.
+
+    Half-open `[low, high)` except the last band, which is closed so the highest
+    edge cannot drop a row. `bounds` is assumed sorted and contiguous; the
+    generated `WHEN`s follow its order.
+
+    Returns one dict per band, ascending by `low`, each:
+      `low`, `high`   the band's own edges -- **these are the join key**, so a
+                      caller matches a probability to its band numerically rather
+                      than through a formatted string. `label` below is for
+                      humans and is deliberately not what anything is matched on:
+                      a label that is compared as text is a label whose format can
+                      drift out of step with the numbers.
+      `label`         the band's own text, e.g. "0.5-0.6"
+      `n`             how many resolved rows fell in it
+      `hits`          how many of those resolved positive
+      `rate`          hits / n. Always a float: `GROUP BY` cannot produce a band
+                      with no rows, so there is no empty case to answer for
+      `mean_predicted` mean `predicted_prob` over the band, which is the number
+                      the realised rate is compared against to measure calibration
+      `as_of`         latest `resolved_at` in the band -- when the record was last
+                      brought up to date by a result
+      `n_resolved`    resolved rows in the WHOLE table, so a caller can tell a
+                      thin record from a thin band
+
+    **A band with no rows is ABSENT, not present with a zero.** `GROUP BY` over a
+    `CASE` can only emit groups that have rows, so an unfilled band never appears
+    and this function has no empty case to represent. That is the right shape for
+    "no data, no row" (spec §2) — and it is why `rate` is a plain float rather
+    than `None`-on-empty: a `None` branch here would be unreachable code that
+    reads as though an empty band were handled.
+    """
+    if not bounds:
+        return []
+    # Group by each band's LOW edge: the WHEN arms carry the low of the band they
+    # open, and the final ELSE carries the last band's, so the grouping key is a
+    # number rather than a formatted string.
+    whens = " ".join(
+        f"WHEN predicted_prob < {high!r} THEN {low!r}"
+        for low, high in bounds[:-1]
+    )
+    query = (
+        "SELECT CASE " + whens + f" ELSE {bounds[-1][0]!r} END AS low, "
+        "COUNT(*) AS n, COALESCE(SUM(actual_outcome), 0) AS hits, "
+        "AVG(predicted_prob) AS mean_predicted, MAX(resolved_at) AS as_of "
+        "FROM session_predictions WHERE resolved = 1 AND predicted_prob IS NOT NULL "
+        "GROUP BY low"
+    )
+    with _connect() as conn:
+        rows = conn.execute(query).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) FROM session_predictions "
+            "WHERE resolved = 1 AND predicted_prob IS NOT NULL"
+        ).fetchone()[0]
+
+    high_of = {low: high for low, high in bounds}
+    out = []
+    for low, n, hits, mean_predicted, as_of in rows:
+        high = high_of[low]
+        out.append({
+            "low": low,
+            "high": high,
+            "label": f"{low:.1f}-{high:.1f}",
+            "n": int(n),
+            "hits": int(hits),
+            # No `if n` guard. `GROUP BY` cannot emit a group with no rows, so
+            # every band here has `n >= 1` and the empty case is unreachable —
+            # an earlier `... if n else None` was a branch nothing could reach,
+            # which is worse than no branch: it reads as though an unfilled band
+            # arrives and is handled. An unfilled band does not arrive at all.
+            # `test_a_band_with_no_rows_is_absent_rather_than_zero` pins that.
+            "rate": int(hits) / int(n),
+            "mean_predicted": float(mean_predicted),
+            "as_of": as_of,
+            "n_resolved": int(total),
+        })
+    return sorted(out, key=lambda row: row["low"])
+
+
 def get_championship_history(season: int, championship: str) -> pd.DataFrame:
     with _connect() as conn:
         return pd.read_sql(
