@@ -85,6 +85,9 @@ def get_signals(session_id: str) -> dict:
         # is a server fault this endpoint absorbs so a missing row cannot become
         # a broken fixture page.
         logger.exception("signals unavailable for %s", session_id)
-        return {"signals": []}
+        # The SAME shape as the success path, so a client reading `sport` or `id`
+        # does not get a different object only when the backend is failing — the
+        # one moment a client is least able to cope with a special case.
+        return {"sport": "f1", "id": str(session_id), "signals": []}
 
     return {"sport": "f1", "id": str(session_id), "signals": signals}

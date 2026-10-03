@@ -64,15 +64,14 @@ def _bands_from_the_committed_db() -> list[dict]:
     return store.get_probability_buckets(trust.BUCKET_BOUNDS)
 
 
-#: The published table, re-derived from the committed blob on 2026-10-03.
+#: A snapshot of the published table, re-derived from the committed blob at
+#: `0071bc32` on 2026-10-03, and **nothing but a snapshot**.
 #:
-#: NOTE THIS IS NOT THE TABLE IN THE SPIKE DOC. That was measured at F1
-#: `6f492739` (blob `da6217d9`, 1,452 resolved rows); `data/tracking.db` is
-#: refreshed by an automated commit and the blob at this base is `0071bc32` with
-#: 1,584 resolved rows, so every band has grown. Asserted here rather than
-#: copied into the adapter, because a band table that only exists in a test is a
-#: band table nothing reads.
-PUBLISHED_BANDS = [
+#: `data/tracking.db` is refreshed by an automated commit, so these counts are
+#: wrong the moment the next refresh lands — see `test_the_snapshot_is_a_snapshot
+#: _not_a_promise` for why that is allowed and what carries the weight instead.
+#: The band EDGES below are load-bearing and permanent; the counts are not.
+SNAPSHOT_BANDS = [
     # (label, n, hits)
     ("0.0-0.3", 1235, 151),
     ("0.3-0.4", 148, 52),
@@ -81,6 +80,13 @@ PUBLISHED_BANDS = [
     ("0.6-0.7", 45, 34),
     ("0.7-1.0", 85, 69),
 ]
+
+#: The band edges, which never change because nothing refreshes them.
+EXPECTED_BAND_EDGES = [(0.0, 0.3), (0.3, 0.4), (0.4, 0.5), (0.5, 0.6), (0.6, 0.7), (0.7, 1.0)]
+
+
+def _sorted_by_low(bands: list[dict]) -> list[dict]:
+    return sorted(bands, key=lambda b: b["low"])
 
 
 def _make_db(path: Path, rows: list[tuple[float, int]]) -> Path:
@@ -170,14 +176,93 @@ def _pct_rounds_half_up() -> bool:
 
 
 class TestTheBand:
-    def test_the_re_derived_table_is_the_published_one(self):
-        bands = _bands_from_the_committed_db()
-        assert [(b["label"], b["n"], b["hits"]) for b in bands] == PUBLISHED_BANDS
-        assert bands[0]["n_resolved"] == 1584, "the resolved-row count moved; republish the table"
+    """The band's EDGES and its arithmetic are permanent. Its counts are not, and
+    pretending otherwise would make this suite fail on an automated commit that
+    changed no code in it — which is the failure mode this class is arranged
+    around.
+
+    The properties asserted here (every band is a contiguous half-open range;
+    `rate == hits/n`; the counts partition the resolved rows; the rendered bands
+    are ordered no worse than chance) hold whatever the store holds. The one
+    snapshot is `test_the_snapshot_is_a_snapshot_not_a_promise`, and it is written
+    so that a refresh reports itself instead of asserting a stale number.
+    """
+
+    def test_the_bands_are_the_edges_the_adapter_declares(self):
+        got = [(b["low"], b["high"]) for b in _sorted_by_low(_bands_from_the_committed_db())]
+
+        assert got == EXPECTED_BAND_EDGES
+        assert got == [(low, high) for low, high in trust.BUCKET_BOUNDS]
+
+    def test_every_band_is_a_contiguous_half_open_range(self):
+        bands = _sorted_by_low(_bands_from_the_committed_db())
+
+        for lower, higher in zip(bands, bands[1:]):
+            assert lower["high"] == higher["low"], "a gap or an overlap between bands loses or double-counts rows"
+        assert bands[0]["low"] == 0.0
+        assert bands[-1]["high"] == 1.0
+
+    def test_the_bands_partition_the_resolved_rows(self):
+        """The identity that makes `n` meaningful: every resolved pick is in
+        exactly one band, so the band counts add up to the whole record."""
+        bands = _sorted_by_low(_bands_from_the_committed_db())
+
+        assert sum(b["n"] for b in bands) == bands[0]["n_resolved"]
 
     def test_the_hit_rate_is_hits_over_n(self):
         for band in _bands_from_the_committed_db():
             assert band["rate"] == pytest.approx(band["hits"] / band["n"])
+
+    def test_an_unfilled_band_is_absent_rather_than_zero(self, tmp_path, monkeypatch):
+        """A band with nothing in it must not read as a measured 0% hit rate.
+
+        The shipped store fills every band, so this tests the RULE rather than
+        today's data: a new season's first rows land in one band, and a band that
+        reports `rate: 0.0` for a store which has simply never seen one would put
+        "right 0% of the time" on the page. The band is ABSENT instead.
+
+        An earlier version of this test also reverted the store to
+        `rate = ... if n else 0.0`, intending to prove that `None`-on-empty branch
+        was reachable and mattered. It was neither: `GROUP BY` over a `CASE` cannot
+        emit a group with no rows, so the revert produced no failure. The dead
+        branch was then deleted rather than left in place looking handled — a guard
+        against a case that cannot occur is a claim about the code that is not true.
+        """
+        monkeypatch.setattr(store, "TRACKING_DB_PATH", tmp_path / "one-band.db")
+        # Every row in the top band, so the bands below it are empty.
+        low, high = trust.BUCKET_BOUNDS[-1]
+        _make_db(tmp_path / "one-band.db", [((low + high) / 2, 1)] * 40)
+
+        bands = store.get_probability_buckets(trust.BUCKET_BOUNDS)
+
+        assert [b["label"] for b in bands] == [f"{low:.1f}-{high:.1f}"], (
+            "an unfilled band must be absent, so one that has never been filled "
+            "cannot appear carrying a figure"
+        )
+
+    def test_the_snapshot_is_a_snapshot_not_a_promise(self):
+        """The one place exact counts appear, and it says so out loud.
+
+        A refresh lands on this test and it fails with a message naming what
+        moved, which is a person updating a published figure on purpose. That is
+        the intended behaviour for a table the PR body quotes: it should be
+        re-measured and re-published, not silently re-baselined by whatever
+        refreshed the store. Every OTHER assertion in this file is count-free and
+        survives the same refresh untouched.
+        """
+        bands = _bands_from_the_committed_db()
+        got = [(b["label"], b["n"], b["hits"]) for b in bands]
+
+        if got != SNAPSHOT_BANDS:
+            pytest.fail(
+                "data/tracking.db has been refreshed and these bands moved:\n"
+                f"  snapshot: {SNAPSHOT_BANDS}\n"
+                f"  now:      {got}\n"
+                "Re-measure the table, update SNAPSHOT_BANDS and the table in the PR "
+                "body, and check that the signal still reads honestly. Do not just "
+                "copy the new numbers across — the floor and the monotonicity are "
+                "the properties that matter."
+            )
 
     def test_the_calibration_is_monotone_across_the_rendered_bands(self):
         """The reason this signal is worth shipping: a higher stated probability
@@ -191,10 +276,22 @@ class TestTheBand:
         test says what is true and the PR quotes the dip.
         """
         rendered = [b for b in _bands_from_the_committed_db() if b["n"] >= trust.TRUST_MIN_N]
-        assert len(rendered) >= 4, "too few bands clear the floor for this to mean anything"
-        rates = [b["rate"] for b in rendered]
-        for lower, higher in zip(rates, rates[1:]):
-            assert higher >= lower, f"a higher stated probability realised a LOWER rate: {rates}"
+        assert len(rendered) >= 4, (
+            f"only {len(rendered)} of 6 bands clear the floor, which is too few for "
+            f"the ordering to say anything; the record has thinned out"
+        )
+        # Count-free: no band's size is asserted, only the ORDER of the rates,
+        # which is the property the signal rests on and which a refresh either
+        # preserves or genuinely breaks.
+        ordered = sorted(rendered, key=lambda b: b["low"])
+        rates = [b["rate"] for b in ordered]
+        for lower_band, higher_band in zip(ordered, ordered[1:]):
+            lower, higher = lower_band["rate"], higher_band["rate"]
+            assert higher >= lower, (
+                f"{higher_band['label']} (stated {higher_band['mean_predicted']:.3f}) realised "
+                f"{higher:.3f} against {lower_band['label']}'s {lower:.3f}: a higher stated "
+                f"probability realised a LOWER rate, so this signal's premise no longer holds"
+            )
 
     @pytest.mark.parametrize(
         "prob,expected",
@@ -228,18 +325,24 @@ class TestTheBand:
         assert trust.band_label(prob) == expected
 
     def test_a_session_in_a_band_gets_that_bands_n_and_hit_rate(self):
-        bands = {b["label"]: b for b in _bands_from_the_committed_db()}
-        for label, n, hits in PUBLISHED_BANDS:
-            band = bands[label]
-            if n < trust.TRUST_MIN_N:
-                # Asserted in TestTheFloor; here only that the mapping is coherent.
+        """Count-free on purpose: read the band's own figures back off the signal.
+
+        The mapping asserted is "the probability's band -> that band's n, that
+        band's rate, that band's label in `source`", and every expected value is
+        read from the store in the same test. A refresh changes the numbers and
+        this test does not notice, which is the point: it is testing the
+        ADAPTER'S JOIN, not the size of the record.
+        """
+        for band in _bands_from_the_committed_db():
+            if band["n"] < trust.TRUST_MIN_N:
                 continue
             prob = (band["low"] + band["high"]) / 2
             signal = trust.trust_signal("2026-15-race", prob)
-            assert signal is not None, f"{label} clears the floor but produced no signal"
-            assert signal["n"] == n
-            assert signal["headline"]["figures"]["rate"] == pytest.approx(hits / n)
-            assert label in signal["source"]
+
+            assert signal is not None, f"{band['label']} clears the floor but produced no signal"
+            assert signal["n"] == band["n"]
+            assert signal["headline"]["figures"]["rate"] == pytest.approx(band["rate"])
+            assert band["label"] in signal["source"]
 
     def test_the_band_the_pick_falls_in_is_the_band_the_signal_reads(self, monkeypatch):
         """Through the API, not through the adapter directly.
@@ -250,7 +353,8 @@ class TestTheBand:
         test goes in at the endpoint and reads the band off the payload.
         """
         bands = {b["label"]: b for b in _bands_from_the_committed_db()}
-        target = bands["0.7-1.0"]
+        # The deepest band, so the floor cannot be what makes this pass.
+        target = max(bands.values(), key=lambda b: b["n"])
         prob = (target["low"] + target["high"]) / 2
         monkeypatch.setattr(
             facts_mod, "session_pick",
@@ -301,13 +405,29 @@ class TestTheFloor:
         assert signal is not None, "n == 30 must render; the floor is >=, not >"
         assert signal["n"] == 30
 
-    def test_the_committed_bands_below_the_floor_are_the_one_thin_one(self):
-        thin = [b for b in _bands_from_the_committed_db() if b["n"] < trust.TRUST_MIN_N]
-        assert [(b["label"], b["n"]) for b in thin] == [("0.5-0.6", 27)]
+    def test_no_committed_band_silently_bypasses_the_floor(self):
+        """The floor against the REAL store, stated as the property rather than as
+        a count.
 
-    def test_the_thin_band_in_the_committed_db_really_emits_nothing(self):
-        """The floor is not theoretical: the shipped data has a band under it."""
-        assert trust.trust_signal("2026-15-race", 0.55) is None
+        Was `assert [(label, n)] == [("0.5-0.6", 27)]` — which pins that exactly one
+        band is thin and names its size, so a refresh that changes either fails it
+        for no reason connected to this code. What actually matters is the rule:
+        **whatever is under the floor emits nothing, and whatever is at or over it
+        emits a signal.** That holds at any size, so it holds after a refresh.
+        """
+        for band in _bands_from_the_committed_db():
+            prob = (band["low"] + band["high"]) / 2
+            signal = trust.trust_signal("2026-15-race", prob)
+            if band["n"] < trust.TRUST_MIN_N:
+                assert signal is None, (
+                    f"{band['label']} holds {band['n']} picks, under the floor, and "
+                    f"still produced a signal reporting a rate from {band['n']} games"
+                )
+            elif band["n"] > 0:
+                assert signal is not None, (
+                    f"{band['label']} holds {band['n']} picks, over the floor, and "
+                    f"produced nothing — the floor is suppressing a band it should not"
+                )
 
     def test_a_two_pick_band_would_otherwise_report_a_rate(self, tmp_path, monkeypatch):
         """The exact failure §4 names: a rate from a handful of games.
@@ -568,22 +688,33 @@ class TestStrength:
     def test_a_thin_bands_gap_does_not_outrank_a_deep_bands_smaller_gap(self):
         """The property the standard-error division actually buys, on real bands.
 
-        The shipped 0.4-0.5 band has a gap of 0.052 on 44 picks and the 0.0-0.3
-        band a gap of 0.021 on 1235. Ordered by the raw gap the thin band comes
+        Both bands are PICKED from the store by their sample sizes rather than
+        named, so this survives a refresh: it is comparing the thinnest band that
+        clears the floor against the deepest one, which is the comparison the
+        formula exists to get right.
+
+        On the shipped store the 0.4-0.5 band has a gap of 0.052 on 44 picks and
+        0.0-0.3 a gap of 0.021 on 1235. Ordered by the raw gap the thin band comes
         first, which would show a reader a 44-game coincidence in preference to a
-        1235-game miscalibration. Ordered by strength it comes second.
+        1235-game miscalibration.
         """
-        bands = {b["label"]: b for b in _bands_from_the_committed_db() if b["n"] >= trust.TRUST_MIN_N}
-        thin, deep = bands["0.4-0.5"], bands["0.0-0.3"]
+        rendered = [b for b in _bands_from_the_committed_db() if b["n"] >= trust.TRUST_MIN_N]
+        thin = min(rendered, key=lambda b: b["n"])
+        deep = max(rendered, key=lambda b: b["n"])
 
         thin_gap = abs(thin["rate"] - thin["mean_predicted"])
         deep_gap = abs(deep["rate"] - deep["mean_predicted"])
-        assert thin_gap > deep_gap, "precondition: the thin band's raw gap is the larger one"
+        assert thin_gap > deep_gap, (
+            f"precondition: the thinnest band's raw gap should be the larger one "
+            f"({thin['label']} {thin_gap:.4f} vs {deep['label']} {deep_gap:.4f}); if "
+            f"a refresh changed that, this test is no longer testing the ordering"
+        )
 
         thin_strength = trust.strength(thin["rate"], thin["mean_predicted"], thin["n"])
         deep_strength = trust.strength(deep["rate"], deep["mean_predicted"], deep["n"])
         assert deep_strength > thin_strength, (
-            f"deep band {deep_strength:.3f} must outrank thin band {thin_strength:.3f}"
+            f"{deep['label']} ({deep['n']} picks) must outrank {thin['label']} "
+            f"({thin['n']} picks): {deep_strength:.3f} vs {thin_strength:.3f}"
         )
 
     def test_it_reproduces_its_own_formula_on_every_committed_band(self):
@@ -618,7 +749,7 @@ class TestStrength:
         # A gap of 0.5 at full confidence, and a degenerate band of certainties.
         assert trust.strength(rate=1.0, mean_predicted=0.5, n=10) == 1.0
         assert trust.strength(rate=0.0, mean_predicted=1.0, n=1000) == 1.0
-        assert 0.0 <= trust.strength(0.12, 0.10, 1235) <= 1.0
+        assert 0.0 <= trust.strength(0.12, 0.10, 1000) <= 1.0
 
     def test_a_band_of_certainties_does_not_divide_by_zero(self):
         """`se` is 0 when every stated probability in the band is the same and
@@ -702,13 +833,17 @@ class TestTheCommittedBlobIsTheSource:
         against an adapter whose figures were `if False: pass`.
         """
         monkeypatch.setattr(store, "TRACKING_DB_PATH", tmp_path / "untracked.db")
-        _make_db(tmp_path / "untracked.db", [(0.8, 1)] * 77 + [(0.8, 0)] * 8)
+        low, high = trust.BUCKET_BOUNDS[-1]
+        midpoint = (low + high) / 2
+        _make_db(tmp_path / "untracked.db", [(midpoint, 1)] * 7 + [(midpoint, 0)] * 3)
 
         substituted = {b["label"]: b["n"] for b in store.get_probability_buckets(trust.BUCKET_BOUNDS)}
-        assert substituted == {"0.7-1.0": 85}, "the whole fixture lands in the top band"
-        assert substituted != {label: n for label, n, _ in PUBLISHED_BANDS}, (
-            "an untracked store must not reproduce the committed table, or this "
-            "test proves nothing about where the numbers come from"
+
+        assert substituted == {f"{low:.1f}-{high:.1f}": 10}, (
+            "every fixture row was written into the top band, so that is the only "
+            "band the store may report, and the 7/3 split must come through as "
+            "counts — which is what proves the figures are READ from the file "
+            "rather than cached, remembered or hardcoded"
         )
 
     def test_the_band_list_is_defined_once(self):
@@ -796,10 +931,20 @@ class TestTheEndpoint:
         assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
 
     def test_a_session_in_a_sub_floor_band_returns_no_signal(self, client, monkeypatch):
-        """Through the API, so the floor is proven on the path a reader uses."""
+        """Through the API, so the floor is proven on the path a reader uses.
+
+        The probability is chosen to land in whichever band the committed store
+        currently has under the floor, rather than in a hard-coded one: if a
+        refresh moves the thin band, this test still exercises a sub-floor request
+        instead of silently starting to assert nothing.
+        """
+        thin = [b for b in _bands_from_the_committed_db() if b["n"] < trust.TRUST_MIN_N]
+        if not thin:
+            pytest.skip("no band is under the floor in the current store; nothing to send")
+        prob = (thin[0]["low"] + thin[0]["high"]) / 2
         monkeypatch.setattr(
             facts_mod, "session_pick",
-            lambda *a, **k: {"pick": {"label": "x", "prob": 0.55}},
+            lambda *a, **k: {"pick": {"label": "x", "prob": prob}},
         )
 
         response = client.get("/signals/2026-15-race")
@@ -808,9 +953,19 @@ class TestTheEndpoint:
         assert response.json()["signals"] == []
 
     def test_a_real_session_returns_a_payload_the_component_accepts(self, client, monkeypatch):
+        """End to end on the real store, with the band read back off the store.
+
+        `n` and the rate are compared to the band's OWN figures rather than to a
+        pinned count, so a refresh cannot break this; what it pins is that the
+        endpoint's payload satisfies the component's contract, read out of the
+        vendored component in this same test.
+        """
+        bands = _bands_from_the_committed_db()
+        target = max((b for b in bands if b["n"] >= trust.TRUST_MIN_N), key=lambda b: b["n"])
+        prob = (target["low"] + target["high"]) / 2
         monkeypatch.setattr(
             facts_mod, "session_pick",
-            lambda *a, **k: {"pick": {"label": "verstappen", "prob": 0.12}},
+            lambda *a, **k: {"pick": {"label": "verstappen", "prob": prob}},
         )
 
         body = client.get("/signals/2026-15-race").json()
@@ -818,13 +973,19 @@ class TestTheEndpoint:
         assert len(body["signals"]) == 1
         signal = body["signals"][0]
         assert signal["kind"] == "trust"
-        assert signal["n"] == 1235
+        assert signal["n"] == target["n"]
         contract = _vendored_contract()
+        assert signal["headline"]["figures"][contract["figure"][trust.VISUAL]] == pytest.approx(target["rate"])
         assert 0.0 <= signal["headline"]["figures"][contract["figure"][trust.VISUAL]] <= 1.0
         assert len(signal["headline"]["text"].split()) <= contract["max_headline_words"]
 
     def test_an_adapter_failure_does_not_take_down_the_page(self, client, monkeypatch):
-        """A signal is an enhancement; the fixture page must survive its absence."""
+        """A signal is an enhancement; the fixture page must survive its absence.
+
+        And it answers with the SUCCESS shape, not a thinner one: a client reading
+        `sport` or `id` must not receive a different object only when the backend
+        is failing, which is the moment it can least afford a special case.
+        """
         def explode(*args, **kwargs):
             raise sqlite3.OperationalError("database is locked")
 
@@ -837,7 +998,20 @@ class TestTheEndpoint:
         response = client.get("/signals/2026-15-race")
 
         assert response.status_code == 200
-        assert response.json()["signals"] == []
+        assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
+
+    def test_an_unreadable_session_answers_with_the_same_shape_too(self, client, monkeypatch):
+        """The endpoint's own outer guard, which is a different line from the
+        adapter guard above and was a thinner object."""
+        def explode(*args, **kwargs):
+            raise RuntimeError("feature pipeline unavailable")
+
+        monkeypatch.setattr(facts_mod, "session_pick", explode)
+
+        response = client.get("/signals/2026-15-race")
+
+        assert response.status_code == 200
+        assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
 
     def test_an_unknown_session_is_a_404(self, client, monkeypatch):
         def unknown(*args, **kwargs):

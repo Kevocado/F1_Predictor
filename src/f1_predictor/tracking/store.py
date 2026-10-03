@@ -618,8 +618,8 @@ def get_probability_buckets(bounds: list[tuple[float, float]]) -> list[dict]:
       `label`         the band's own text, e.g. "0.5-0.6"
       `n`             how many resolved rows fell in it
       `hits`          how many of those resolved positive
-      `rate`          hits / n, or None when n is 0 (never 0.0: an empty band says
-                      nothing, and 0.0 would read as a measured miss)
+      `rate`          hits / n. Always a float: `GROUP BY` cannot produce a band
+                      with no rows, so there is no empty case to answer for
       `mean_predicted` mean `predicted_prob` over the band, which is the number
                       the realised rate is compared against to measure calibration
       `as_of`         latest `resolved_at` in the band -- when the record was last
@@ -627,8 +627,12 @@ def get_probability_buckets(bounds: list[tuple[float, float]]) -> list[dict]:
       `n_resolved`    resolved rows in the WHOLE table, so a caller can tell a
                       thin record from a thin band
 
-    Bands with `n == 0` are omitted entirely rather than carried as empties:
-    "no data, no row" (spec §2) starts here, one layer below the renderer.
+    **A band with no rows is ABSENT, not present with a zero.** `GROUP BY` over a
+    `CASE` can only emit groups that have rows, so an unfilled band never appears
+    and this function has no empty case to represent. That is the right shape for
+    "no data, no row" (spec §2) — and it is why `rate` is a plain float rather
+    than `None`-on-empty: a `None` branch here would be unreachable code that
+    reads as though an empty band were handled.
     """
     if not bounds:
         return []
@@ -663,8 +667,14 @@ def get_probability_buckets(bounds: list[tuple[float, float]]) -> list[dict]:
             "label": f"{low:.1f}-{high:.1f}",
             "n": int(n),
             "hits": int(hits),
-            "rate": (int(hits) / int(n)) if n else None,
-            "mean_predicted": None if mean_predicted is None else float(mean_predicted),
+            # No `if n` guard. `GROUP BY` cannot emit a group with no rows, so
+            # every band here has `n >= 1` and the empty case is unreachable —
+            # an earlier `... if n else None` was a branch nothing could reach,
+            # which is worse than no branch: it reads as though an unfilled band
+            # arrives and is handled. An unfilled band does not arrive at all.
+            # `test_a_band_with_no_rows_is_absent_rather_than_zero` pins that.
+            "rate": int(hits) / int(n),
+            "mean_predicted": float(mean_predicted),
             "as_of": as_of,
             "n_resolved": int(total),
         })

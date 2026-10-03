@@ -87,7 +87,11 @@ clipping, so two bands can never tie at an arbitrary ceiling.
 
 Measured on the committed blob (only the bands that clear the floor, since
 `0.5-0.6` does not): gap 0.021 -> 0.81, gap 0.008 -> 0.07, gap 0.052 -> 0.23,
-gap 0.101 -> 0.47, gap 0.017 -> 0.13.
+gap 0.101 -> 0.47, gap 0.017 -> 0.13. Those figures are a snapshot of ONE
+refresh; the store is refreshed by an automated commit, so they are recorded here
+as the measurement that was taken rather than as a constant. Nothing in this
+module depends on them — re-derive with
+`store.get_probability_buckets(BUCKET_BOUNDS)`.
 
 ## THE HEADLINE, and why its wording is load-bearing.
 
@@ -291,7 +295,7 @@ def trust_signal(game_id: str, prob: float) -> dict | None:
         return None
 
     band = next((b for b in bands if b["low"] == low and b["high"] == high), None)
-    if band is None or band["n"] < TRUST_MIN_N or band["rate"] is None:
+    if band is None or band["n"] < TRUST_MIN_N:
         return None
 
     rate, mean_predicted = band["rate"], band["mean_predicted"]
