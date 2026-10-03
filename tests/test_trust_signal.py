@@ -704,11 +704,17 @@ class TestStrength:
 
         thin_gap = abs(thin["rate"] - thin["mean_predicted"])
         deep_gap = abs(deep["rate"] - deep["mean_predicted"])
-        assert thin_gap > deep_gap, (
-            f"precondition: the thinnest band's raw gap should be the larger one "
-            f"({thin['label']} {thin_gap:.4f} vs {deep['label']} {deep_gap:.4f}); if "
-            f"a refresh changed that, this test is no longer testing the ordering"
-        )
+        # A SKIP, not an assert. The precondition is about the DATA, not the code:
+        # it holds on the committed store, and a refresh could make the deepest
+        # band hold the larger raw gap, at which point this pair says nothing about
+        # ordering and there is nothing here worth failing over. Asserting instead
+        # would fail the suite for a change in no code of this PR — which is the
+        # one thing the snapshot exists to avoid.
+        if not thin_gap > deep_gap:
+            pytest.skip(
+                f"precondition not met on the current store: {thin['label']} gap "
+                f"{thin_gap:.4f} vs {deep['label']} gap {deep_gap:.4f}"
+            )
 
         thin_strength = trust.strength(thin["rate"], thin["mean_predicted"], thin["n"])
         deep_strength = trust.strength(deep["rate"], deep["mean_predicted"], deep["n"])
