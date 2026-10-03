@@ -18,10 +18,12 @@ describe a session.
 Before the reversal, `get_session_track_record` judged a session only if EVERY
 one of its rows was snapshotted before it started; a session with any late row
 was dropped whole and reported as `n_rebuilt_sessions`. That is the "stops
-tracking" failure, and on this repo's own `data/tracking.db` it is severe: 12 of
-17 recorded sessions are dropped, 1,056 of 1,452 graded picks never reach a
-published figure, and one session type (`race`/`post_qualifying`) is reported at
-n=22 per market when 286 were recorded.
+tracking" failure, and on this repo's own `data/tracking.db` it was severe:
+measured at blob `0071bc32` on 2026-10-03 (a DATED figure -- the store is
+refreshed by an automated commit, so these totals have moved since and must be
+re-measured before use), 12 of 17 recorded sessions were dropped and 1,056 of
+1,584 graded picks reached no published figure, with one market
+(`race`/`post_qualifying`/`dnf`) published at n=22 when 286 were recorded.
 
 What replaced it:
 
@@ -397,30 +399,71 @@ def test_the_endpoint_serves_both_figures_and_the_per_pick_disclosure():
 
 
 # --- the shipped state: is the headline empty over a populated record? --------
+# Count-free on purpose: `data/tracking.db` refreshes itself, so the assertions
+# below are properties of the rule, not totals. See the test's docstring.
 
-def test_the_shipped_record_populates_the_headline_and_leaves_pre_session_empty():
+def test_the_shipped_headline_covers_every_recorded_pick_and_pre_session_is_a_subset():
     """PL shipped `n_resolved_fixtures: 0, pct_correct_overall: null` with 50
-    graded picks in the same payload. This repo has the same DISEASE at a
-    different size, and this is its measurement, pinned.
+    graded picks in the same payload. This repo had the same DISEASE at a
+    different size.
 
-    On the shipped `data/tracking.db`: 1,452 resolved picks are recorded, the
-    headline published **396** of them, and **1,056** (73%) are in no figure on
-    the page at all -- 12 of the 17 recorded sessions are dropped whole because
-    each of them has at least one row written after it started. The worst
-    single market, `race`/`post_qualifying`/`dnf`, is published at n=22 when 286
-    were recorded.
+    Before the reversal, on this repo's own `data/tracking.db`, a session was
+    published only if EVERY one of its rows was snapshotted before it started;
+    12 of the 17 recorded sessions were dropped whole and 1,056 graded picks
+    reached no published figure at all. The worst single market,
+    `race`/`post_qualifying`/`dnf`, was published at n=22 when 286 were
+    recorded.
 
-    Under the new rule the headline is every recorded pick and `pre_session` is
-    the 396 the old headline published. Both are asserted here against the real
-    file, so a future data load that changes either number fails and forces the
-    new figures to be reported.
+    **Why this asserts PROPERTIES and not counts.** `data/tracking.db` is
+    refreshed by an automated commit (the "Refresh public snapshot + track
+    record" job), so its row totals move on their own. This version of the test
+    pinned 1,452 / 396 / 1,056 / 286, which is a landmine: the store refreshed to
+    1,584 resolved rows and the suite went red for a reason that has nothing to
+    do with the code, and would go red again on the next refresh. Re-baselining
+    to 1,584 would re-arm the same landmine one refresh later, which is why it
+    is not done here.
+
+    What the test is actually FOR survives the refresh, because it is a property
+    of the RULE rather than a total:
+
+      * the headline covers every resolved pick the store holds, so whole-session
+        dropping cannot come back;
+      * every published market carries the FULL count recorded for it, so no
+        market can be hidden again (this is the property the single `dnf` figure
+        used to stand in for, and it is strictly stronger);
+      * `pre_session` is a non-empty STRICT subset beside the headline -- not
+        empty, and not the whole record in disguise;
+      * the two partition the headline exactly.
+
+    The dated figures that used to live here are not lost: they are re-measured
+    and published in `tests/test_trust_signal.py::SNAPSHOT_BANDS`, against a named
+    blob SHA, where a refresh trips a test that SAYS it is a snapshot. Keeping one
+    dated snapshot of this store in one place, and leaving every other test
+    count-free, is the whole arrangement.
+
+    One earlier claim here was false against the data and is corrected: the
+    pre-session subset is NOT "the figure the old headline published". The old
+    rule dropped sessions whole; `pre_session` is a per-pick subset of the FULL
+    counted record. The two were never the same set, so the subset is asserted
+    only for what it must be -- a strict, non-empty subset.
     """
     db = REPO / "data" / "tracking.db"
     if not db.exists():
         pytest.skip("no shipped tracking database in this checkout")
 
+    # Every count below is read out of the shipped file at run time. Nothing is
+    # hardcoded, so a refresh moves the numbers without moving the assertions.
     with sqlite3.connect(f"file:{db}?mode=ro", uri=True) as conn:
-        resolved = conn.execute("SELECT COUNT(*) FROM session_predictions WHERE resolved = 1").fetchone()[0]
+        resolved = conn.execute(
+            "SELECT COUNT(*) FROM session_predictions WHERE resolved = 1"
+        ).fetchone()[0]
+        recorded_by_market = {
+            (session_type, tier, market): n
+            for session_type, tier, market, n in conn.execute(
+                "SELECT session_type, tier, market, COUNT(*) FROM session_predictions "
+                "WHERE resolved = 1 GROUP BY session_type, tier, market"
+            )
+        }
 
     from f1_predictor import config
 
@@ -431,14 +474,29 @@ def test_the_shipped_record_populates_the_headline_and_leaves_pre_session_empty(
     finally:
         store.TRACKING_DB_PATH = original
 
-    assert resolved == 1452, (
-        f"the shipped database now holds {resolved} resolved rows, not 1452; "
-        "report the new before/after figures here before changing this assertion"
+    assert record["n_resolved"] == resolved, (
+        f"the headline counts {record['n_resolved']} picks but the store holds "
+        f"{resolved} resolved ones, so whole sessions are being dropped again"
     )
-    assert record["n_resolved"] == 1452, "the headline is not every recorded pick"
-    assert record["n_pre_session"] == 396, "the pre-session subset is not the old headline"
-    assert record["n_resolved"] == record["n_pre_session"] + record["n_post_session_picks"]
-    assert record["n_post_session_picks"] == 1056
-    dnf = next(r for r in record["by_market"]
-               if r["session_type"] == "race" and r["tier"] == "post_qualifying" and r["market"] == "dnf")
-    assert dnf["n"] == 286, "the worst-hidden market is still hidden"
+
+    published_by_market = {
+        (row["session_type"], row["tier"], row["market"]): row["n"]
+        for row in record["by_market"]
+    }
+    assert published_by_market == recorded_by_market, (
+        "the published markets are not the recorded markets, so a market is "
+        f"hidden again; under-published: "
+        f"{ {k: (recorded_by_market[k], published_by_market.get(k)) for k in recorded_by_market if published_by_market.get(k) != recorded_by_market[k]} }"
+    )
+
+    assert 0 < record["n_pre_session"] < record["n_resolved"], (
+        f"pre_session is {record['n_pre_session']} of {record['n_resolved']} picks; "
+        "it must be a non-empty strict subset of the headline"
+    )
+    assert record["n_resolved"] == record["n_pre_session"] + record["n_post_session_picks"], (
+        "the pre-session subset and the post-session picks must partition the headline"
+    )
+    assert record["n_post_session_picks"] > 0, (
+        "no pick is recorded after its session started, so this store no longer "
+        "exercises the rule this file exists to protect"
+    )

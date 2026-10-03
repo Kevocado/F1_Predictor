@@ -53,7 +53,9 @@ def test_track_record_counts_every_recorded_pick_with_the_pre_session_subset_bes
     round 2 entirely after it ran. Round 2 was dropped whole: eight recorded
     picks in no figure on the page, because a model re-run had touched the
     session. That is Kevin's "with every model change it will stop tracking",
-    measured, and on the shipped database it withholds 1,056 of 1,452 picks.
+    measured, and on the shipped database it withheld 1,056 picks out of the
+    1,584 recorded (dated: blob `0071bc32`, 2026-10-03 -- the store is refreshed
+    automatically, so re-measure before quoting either number).
 
     Now both count -- 16 picks, 4 on the `win` market -- and `pre_session`
     beside them is exactly the figure the old headline published: 8 picks, 2 on
