@@ -925,13 +925,13 @@ class TestTheEndpoint:
         return TestClient(app)
 
     def test_a_malformed_id_is_a_404(self, client):
-        assert client.get("/signals/not-an-id").status_code == 404
-        assert client.get("/signals/2026-15-post_quals").status_code == 404
+        assert client.get("/api/signals/not-an-id").status_code == 404
+        assert client.get("/api/signals/2026-15-post_quals").status_code == 404
 
     def test_a_session_with_no_pick_returns_an_empty_list_not_an_error(self, client, monkeypatch):
         monkeypatch.setattr(facts_mod, "session_pick", lambda *a, **k: {"pick": None})
 
-        response = client.get("/signals/2026-15-race")
+        response = client.get("/api/signals/2026-15-race")
 
         assert response.status_code == 200
         assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
@@ -953,7 +953,7 @@ class TestTheEndpoint:
             lambda *a, **k: {"pick": {"label": "x", "prob": prob}},
         )
 
-        response = client.get("/signals/2026-15-race")
+        response = client.get("/api/signals/2026-15-race")
 
         assert response.status_code == 200
         assert response.json()["signals"] == []
@@ -974,7 +974,7 @@ class TestTheEndpoint:
             lambda *a, **k: {"pick": {"label": "verstappen", "prob": prob}},
         )
 
-        body = client.get("/signals/2026-15-race").json()
+        body = client.get("/api/signals/2026-15-race").json()
 
         assert len(body["signals"]) == 1
         signal = body["signals"][0]
@@ -1001,7 +1001,7 @@ class TestTheEndpoint:
             lambda *a, **k: {"pick": {"label": "x", "prob": 0.12}},
         )
 
-        response = client.get("/signals/2026-15-race")
+        response = client.get("/api/signals/2026-15-race")
 
         assert response.status_code == 200
         assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
@@ -1014,7 +1014,7 @@ class TestTheEndpoint:
 
         monkeypatch.setattr(facts_mod, "session_pick", explode)
 
-        response = client.get("/signals/2026-15-race")
+        response = client.get("/api/signals/2026-15-race")
 
         assert response.status_code == 200
         assert response.json() == {"sport": "f1", "id": "2026-15-race", "signals": []}
@@ -1027,7 +1027,7 @@ class TestTheEndpoint:
 
         monkeypatch.setattr(facts_mod, "session_pick", unknown)
 
-        assert client.get("/signals/2026-99-race").status_code == 404
+        assert client.get("/api/signals/2026-99-race").status_code == 404
 
     def test_the_router_is_mounted_on_the_real_app(self):
         """Reachable from the app, not only from a router built inside a test.
@@ -1037,8 +1037,17 @@ class TestTheEndpoint:
         not show included endpoints at all. The schema is the stronger claim
         anyway — it is what `/docs` serves, so a path in it is a path a client
         can call.
+
+        The `/api` PREFIX is the point of this test, not incidental. The router
+        used to be mounted at the root, which every other assertion in this file
+        was happy with — `TestClient` calls paths directly — while the frontend
+        could not reach it, because `client.ts` addresses the backend through
+        `/api` in production (`VITE_API_BASE_URL=/api`) and in development
+        (`vite.config.ts` proxies only `'/api'`). So the signal existed, was
+        tested, and had no caller. Asserting the prefixed path is what holds the
+        endpoint to the prefix the browser actually uses.
         """
         from f1_predictor.api.main import app
 
-        assert "/signals/{session_id}" in app.openapi()["paths"]
-        assert "get" in app.openapi()["paths"]["/signals/{session_id}"]
+        assert "/api/signals/{session_id}" in app.openapi()["paths"]
+        assert "get" in app.openapi()["paths"]["/api/signals/{session_id}"]

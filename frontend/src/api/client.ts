@@ -9,7 +9,15 @@ import type {
   SessionType,
   TrackRecordResponse,
 } from "../types";
-import type { Explanation } from "../predictor-ui";
+import type { Explanation, Signal } from "../predictor-ui";
+
+/** What `GET /api/signals/{session_id}` answers. `signals` is empty rather than
+ *  absent when the session has no honest signal — see spec §2. */
+export interface SignalsResponse {
+  signals: Signal[];
+  sport?: string;
+  id?: string;
+}
 
 // Same-origin /api: the public Docker build serves frontend and backend
 // together, and the dev server proxies /api to the local backend (see
@@ -64,6 +72,18 @@ export const api = {
    *  state, not as a missing panel. */
   explainSession: (season: number, round: number, session: SessionType) =>
     get<Explanation>(`/explain/f1/${season}-${round}-${session}`),
+  /** Spec §3's per-fixture signal payloads, rendered by the shared
+   *  `SignalRows`. The id is built here from the same three values every other
+   *  caller uses, so it cannot drift from the one `/explain` and `/facts` read;
+   *  the path is relative to `BASE_URL`, which already ends in `/api`, exactly
+   *  as `explainSession` above — repeating the prefix would compose
+   *  `/api/api/signals/...`.
+   *
+   *  A session with nothing to say answers `{"signals": []}`, which is a
+   *  complete answer and renders as no rows at all (spec §2: "No data, no
+   *  row"). A malformed id is a 404, like `/facts/{session_id}`. */
+  signals: (season: number, round: number, session: SessionType) =>
+    get<SignalsResponse>(`/signals/${season}-${round}-${session}`),
   championship: (championship: "drivers" | "constructors", season?: number) =>
     get<ChampionshipResponse>(
       `/championship/${championship}${season ? `?season=${season}` : ""}`,
