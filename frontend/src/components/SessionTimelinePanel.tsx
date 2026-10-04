@@ -7,7 +7,8 @@ import type {
   SessionDriverPrediction,
   SessionType,
 } from "../types";
-import { EmptyState, ErrorState, FixtureExplainer, Skeleton, kickoff } from "../predictor-ui";
+import { EmptyState, ErrorState, FixtureExplainer, SignalRows, Skeleton, kickoff } from "../predictor-ui";
+import type { Signal } from "../predictor-ui";
 import { driverName } from "../lib/teamColors";
 import { HistoryCoverageNote } from "./HistoryCoverageNote";
 import { TierBadge } from "./TierBadge";
@@ -166,6 +167,31 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
     };
   }, [tier, selected]);
 
+  // Spec §3's signal rows for this session. Fetched on mount rather than from
+  // behind the explainer button, because §2 makes signals INSTANT — they are
+  // computed from stored data and "the signals add none" of the AI's cost, so
+  // gating them on a paid click would make a free computed row a paid one.
+  //
+  // This is the only caller of `GET /api/signals/{session_id}`. The adapter, the
+  // endpoint and the shared component were all shipped in Phase 1 and the row
+  // had never reached a page: the router was mounted at the root while the
+  // frontend addresses the backend through `/api`, so nothing could have called
+  // it. `null` means "not known yet, or unreadable"; the render below treats
+  // both the same way and shows nothing, per §2's "No data, no row" — a failed
+  // signal request must not become this panel's error state, because the panel
+  // itself is fine.
+  const [signals, setSignals] = useState<Signal[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .signals(season, round, selected)
+      .then((res) => !cancelled && setSignals(res.signals ?? []))
+      .catch(() => !cancelled && setSignals(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [season, round, selected]);
+
   // The per-market ledger request (`GET /track-record` ->
   // store.get_session_track_record, which groups by session_type, tier and
   // market and reports n / brier / hit_rate / avg_predicted_prob) is GONE with
@@ -261,6 +287,17 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
               after. Stays silent when the window was complete, and when the
               response reports no history load at all. */}
           <HistoryCoverageNote history={data.history} />
+          {/* The signal rows, above the explainer for the same reason the
+              coverage note is: both are computed from stored data and cost
+              nothing, so both belong before the one thing on this panel that
+              waits for a reader and a model. `SignalRows` renders nothing at
+              all for an empty list — the guard is here so the wrapper does not
+              leave an empty margin behind. */}
+          {signals && signals.length > 0 && (
+            <div className="mb-4">
+              <SignalRows signals={signals} />
+            </div>
+          )}
           {/* In plain English, above the timing tower: the one-line answer
               before the grid. The instant block states the timing, the verdict
               and the session record from the session's own predictions and the

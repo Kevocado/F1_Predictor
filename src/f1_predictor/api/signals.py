@@ -1,4 +1,4 @@
-"""signals.py — `GET /signals/{session_id}`, the fixture's signal payloads.
+"""signals.py — `GET /api/signals/{session_id}`, the fixture's signal payloads.
 
 Spec `2026-10-01-fixture-signals-design.md` §3 (the contract) and §2 ("No data,
 no row"). Phase 1 ships exactly one adapter, `trust`; the others arrive with
@@ -27,7 +27,20 @@ from fastapi import APIRouter, HTTPException
 from . import facts
 from ..signals import trust
 
-router = APIRouter()
+#: `/api`, like `routes.py`'s router, and this was a real defect rather than a
+#: style preference. Every other endpoint the frontend calls is served under the
+#: `/api` prefix (`routes.py` declares `APIRouter(prefix="/api")`), and the
+#: frontend reaches the backend through exactly that prefix in BOTH environments:
+#: `client.ts`'s `BASE_URL` is `/api` (baked in at build time by the Dockerfile's
+#: `VITE_API_BASE_URL=/api`), and the dev server proxies only `'/api'`
+#: (`vite.config.ts`). A router mounted at the root was therefore unreachable
+#: from the page in development, and reachable in production only by bypassing
+#: `BASE_URL` — so the one signal Phase 1 shipped had no caller. Nothing failed
+#: and nothing looked broken: `tests/test_trust_signal.py` drove the app through
+#: `TestClient`, which hits paths directly and so never exercised the prefix the
+#: browser actually uses. Hence the assertion on `app.openapi()["paths"]` below,
+#: which pins the prefixed path and would catch a router mounted at the root.
+router = APIRouter(prefix="/api")
 logger = logging.getLogger(__name__)
 
 #: Spec §2: "a fixed rule (not the model) ranks them by `strength` and keeps the
