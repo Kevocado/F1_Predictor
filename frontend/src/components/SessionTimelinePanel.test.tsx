@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // userEvent.setup() rather than the direct userEvent.click(): the direct
@@ -152,6 +152,13 @@ describe("the plain-English panel, reduced", () => {
     await user.click(screen.getByRole("button", { name: /ai summary/i }));
     expect(await screen.findByText("Norris is the pick, with Verstappen the danger.")).toBeInTheDocument();
     expect(explain).toHaveBeenCalledWith(2026, 5, "race");
+  });
+
+  it("hands the loader this session's id as the fixtureId", async () => {
+    vi.spyOn(api, "racePrediction").mockResolvedValue(race("live"));
+    const loadContext = vi.spyOn(api, "loadContext").mockResolvedValue({ matchups: [] });
+    render(<SessionTimelinePanel {...props} />);
+    await waitFor(() => expect(loadContext).toHaveBeenCalledWith("2026-5-race"));
   });
 
   it("shows the flow with no request made when the explainer is unreachable", async () => {

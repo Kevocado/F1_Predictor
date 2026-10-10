@@ -316,6 +316,8 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
                 moment: "the session",
               }}
               request={() => api.explainSession(season, round, selected)}
+              loadContext={api.loadContext}
+              fixtureId={`${season}-${round}-${selected}`}
             />
           </div>
           {/* No "Model's top calls" pop-out, by Kevin's decision, 2026-10-01:

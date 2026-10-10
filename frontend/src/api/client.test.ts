@@ -39,6 +39,14 @@ describe("api client", () => {
     ]);
   });
 
+  it("builds the context loader on the same base as explainSession", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.resolve(new Response("{}")));
+    await api.loadContext("2026-16-race");
+    expect(fetch.mock.calls.map((c) => String(c[0]))).toEqual(["/api/explain/f1/2026-16-race/context"]);
+  });
+
   it("gives up after the timeout instead of loading forever", async () => {
     vi.useFakeTimers();
     vi.spyOn(globalThis, "fetch").mockImplementation(

@@ -9,7 +9,7 @@ import type {
   SessionType,
   TrackRecordResponse,
 } from "../types";
-import type { Explanation, Signal } from "../predictor-ui";
+import { createContextLoader, type Explanation, type Signal } from "../predictor-ui";
 
 /** What `GET /api/signals/{session_id}` answers. `signals` is empty rather than
  *  absent when the session has no honest signal — see spec §2. */
@@ -72,6 +72,9 @@ export const api = {
    *  state, not as a missing panel. */
   explainSession: (season: number, round: number, session: SessionType) =>
     get<Explanation>(`/explain/f1/${season}-${round}-${session}`),
+  /** The Matchup section's data: `<BASE_URL>/explain/f1/<session id>/context`,
+   *  the same base `explainSession` uses. */
+  loadContext: createContextLoader(`${BASE_URL}/explain/f1`),
   /** Spec §3's per-fixture signal payloads, rendered by the shared
    *  `SignalRows`. The id is built here from the same three values every other
    *  caller uses, so it cannot drift from the one `/explain` and `/facts` read;
