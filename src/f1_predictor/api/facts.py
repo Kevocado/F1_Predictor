@@ -39,6 +39,22 @@ SESSION_TYPES = ("qualifying", "sprint", "race")
 #: How a driver is headline-chosen: by race win chance, or by pole in quali.
 _HEADLINE_KEY = {"race": "win", "sprint": "win", "qualifying": "win"}
 
+#: Constructor display names (id -> proper name). The id is jolpica's
+#: `constructorId` (verified against the committed 2025 cache). The display
+#: name is what the sport uses, not a title-cased id.
+_TEAM_DISPLAY_NAMES = {
+    "alpine": "Alpine",
+    "aston_martin": "Aston Martin",
+    "ferrari": "Ferrari",
+    "haas": "Haas",
+    "mclaren": "McLaren",
+    "mercedes": "Mercedes",
+    "rb": "Racing Bulls",
+    "red_bull": "Red Bull",
+    "sauber": "Sauber",
+    "williams": "Williams",
+}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -524,7 +540,10 @@ def _form_rows(
                 continue
             value, count = data[subject_id]
             ranks = _rank({k: v[0] for k, v in data.items()}, lower)
-            name = d.get("name") or did if kind == "driver" else str(team).replace("_", " ").title()
+            if kind == "driver":
+                name = d.get("name") or did
+            else:
+                name = _TEAM_DISPLAY_NAMES.get(str(team), str(team).replace("_", " ").title())
             rows.append({
                 "id": f"{kind}:{subject_id}:{key}",
                 "subject": name,
