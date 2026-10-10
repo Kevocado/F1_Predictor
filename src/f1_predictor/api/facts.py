@@ -25,6 +25,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 
 from . import routes
@@ -421,6 +422,126 @@ def _drivers(
     return top
 
 
+
+# --- form rows (recent form, qualifying pace, track history) --------------
+
+#: Races / qualifying sessions averaged for "recent form".
+FORM_WINDOW = 5
+_DNF_POSITION = 20  # same back-of-field fill the model's own form features use
+
+
+def _load_form_frames(season: int) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """(results, schedule, qualifying) from the jolpica cache the prediction
+    route already loads (`load_history`); [] frames when unavailable."""
+    try:
+        results, schedule, _ = routes.jolpica.load_history(season)
+        quali = routes.jolpica.load_season_qualifying(season)
+    except Exception:
+        logger.info("form history unavailable for %s", season)
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    return results, schedule, quali
+
+
+def _rank(scores: dict[str, float], lower_better: bool) -> dict[str, int]:
+    order = sorted(scores, key=lambda k: scores[k] if lower_better else -scores[k])
+    return {k: i for i, k in enumerate(order, start=1)}
+
+
+def _form_rows(
+    drivers: list[dict],
+    season: int,
+    round_: int,
+    results: pd.DataFrame,
+    schedule: pd.DataFrame,
+    quali: pd.DataFrame,
+    top: int = 3,
+) -> list[dict]:
+    """Recent form, qualifying pace and track history for the top `top`
+    drivers (by win chance) and their constructors, ranked among everyone in
+    `drivers`. Uses only sessions BEFORE (season, round_). A row exists only
+    when its data does."""
+    if not drivers or results.empty:
+        return []
+    entrants = sorted((d for d in drivers if _num(d.get("win")) is not None), key=lambda d: -d["win"])
+    field_d = {str(d["driver_id"]) for d in drivers}
+    team_of = {str(d["driver_id"]): d.get("constructor_id") for d in drivers}
+    field_c = {c for c in team_of.values() if c}
+
+    before = lambda df: df[(df["season"] < season) | ((df["season"] == season) & (df["round"] < round_))]  # noqa: E731
+    res = before(results).sort_values(["season", "round"]).copy()
+    res["finish"] = res["position"].fillna(_DNF_POSITION)
+    q = before(quali).sort_values(["season", "round"]) if not quali.empty else quali
+    circuit = None
+    if not schedule.empty:
+        hit = schedule[(schedule["season"] == season) & (schedule["round"] == round_)]
+        circuit = hit["circuit_id"].iloc[0] if not hit.empty else None
+    visits = pd.DataFrame()
+    if circuit is not None:
+        at = schedule[schedule["circuit_id"] == circuit][["season", "round"]]
+        visits = res.merge(at, on=["season", "round"])
+
+    def per_key(df, key, col, field, window=None, agg="mean"):
+        """key -> (value, count) over each key's last `window` rows."""
+        out = {}
+        if df.empty:
+            return out
+        for k, g in df[df[key].isin(field)].groupby(key):
+            g = g.tail(window) if window else g
+            out[str(k)] = (float(g[col].mean()), len(g))
+        return out
+
+    # constructor form is per-round team points, then averaged over the window
+    team_pts = pd.DataFrame()
+    if not res.empty:
+        team_pts = res.groupby(["constructor_id", "season", "round"], as_index=False)["points"].sum()
+        team_pts = team_pts.sort_values(["season", "round"])
+    team_q = pd.DataFrame()
+    if not q.empty:
+        team_q = q.groupby(["constructor_id", "season", "round"], as_index=False)["quali_position"].mean()
+
+    specs = [
+        # (kind, key, label, data, lower_better, formatter)
+        ("driver", "form", "Recent form", per_key(res, "driver_id", "finish", field_d, FORM_WINDOW), True,
+         lambda v, n: f"avg finish P{v:.1f} (last {n})"),
+        ("driver", "quali", "Qualifying pace", per_key(q, "driver_id", "quali_position", field_d, FORM_WINDOW) if not q.empty else {}, True,
+         lambda v, n: f"avg grid P{v:.1f} (last {n})"),
+        ("driver", "track", "Track history", per_key(visits, "driver_id", "finish", field_d) if not visits.empty else {}, True,
+         lambda v, n: f"avg finish P{v:.1f} over {n} visit{'s' if n != 1 else ''}"),
+        ("team", "form", "Recent form", per_key(team_pts, "constructor_id", "points", field_c, FORM_WINDOW), False,
+         lambda v, n: f"{v:.1f} pts/race (last {n})"),
+        ("team", "quali", "Qualifying pace", per_key(team_q, "constructor_id", "quali_position", field_c, FORM_WINDOW) if not team_q.empty else {}, True,
+         lambda v, n: f"avg grid P{v:.1f} (last {n})"),
+        ("team", "track", "Track history", per_key(visits, "constructor_id", "finish", field_c) if not visits.empty else {}, True,
+         lambda v, n: f"avg finish P{v:.1f} over {n} car-visit{'s' if n != 1 else ''}"),
+    ]
+    rows: list[dict] = []
+    for d in entrants[:top]:
+        did = str(d["driver_id"])
+        team = team_of.get(did)
+        for kind, key, label, data, lower, fmt in specs:
+            subject_id = did if kind == "driver" else team
+            if not subject_id or subject_id not in data:
+                continue
+            value, count = data[subject_id]
+            ranks = _rank({k: v[0] for k, v in data.items()}, lower)
+            name = d.get("name") or did if kind == "driver" else str(team).replace("_", " ").title()
+            rows.append({
+                "id": f"{kind}:{subject_id}:{key}",
+                "subject": name,
+                "label": label,
+                "value": fmt(value, count),
+                "rank": ranks[subject_id],
+                "n": len(data),
+            })
+    # a constructor with two top drivers would repeat its team rows
+    seen, unique = set(), []
+    for r in rows:
+        if r["id"] not in seen:
+            seen.add(r["id"])
+            unique.append(r)
+    return unique
+
+
 def _context(prediction: dict | None) -> dict:
     prediction = prediction or {}
     context: dict[str, Any] = {}
@@ -432,6 +553,24 @@ def _context(prediction: dict | None) -> dict:
     weather = prediction.get("weather")
     if weather:
         context["weather"] = weather
+    return context
+
+
+def _context_with_form(prediction: dict | None, season: int, round_: int, drivers_out: list[dict]) -> dict:
+    context = _context(prediction)
+    constructors = {str(d.get("driver_id")): d.get("constructor_id") for d in _driver_rows(prediction)}
+    field = [{"driver_id": k, "constructor_id": v,
+              "win": next((x["win"] for x in drivers_out if x["driver_id"] == k), None),
+              "name": next((x["name"] for x in drivers_out if x["driver_id"] == k), k)}
+             for k, v in constructors.items()]
+    # Ranked among everyone in the field; only the top drivers (those in
+    # drivers_out) get rows, and win is None for the rest so they are ranked
+    # against but never emitted.
+    if not any(f["win"] is not None for f in field):
+        return context
+    rows = _form_rows(field, season, round_, *_load_form_frames(season))
+    if rows:
+        context["form_rows"] = rows
     return context
 
 
@@ -610,6 +749,7 @@ def get_facts(session_id: str) -> dict:
     if pick_timing == "rebuilt" and result:
         result.pop("pick_won", None)
 
+    drivers_out = _drivers(prediction, stored, names, contributors, started)
     return {
         "sport": "f1",
         "id": str(session_id),
@@ -630,8 +770,8 @@ def get_facts(session_id: str) -> dict:
         "pick_timing": pick_timing,
         "pick": pick,
         "markets": [] if (started and not stored) else _markets(source, stored, names),
-        "drivers": _drivers(prediction, stored, names, contributors, started),
-        "context": _context(prediction),
+        "drivers": drivers_out,
+        "context": _context_with_form(prediction, season, round_, drivers_out),
         "players": [],
         "record": _record(),
         "result": result,
