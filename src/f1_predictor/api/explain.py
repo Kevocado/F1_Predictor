@@ -68,8 +68,23 @@ EXPLAINER_TIMEOUT_S = _positive_float(os.getenv("EXPLAINER_TIMEOUT_S", "15"), "E
 _UNAVAILABLE = "The summary service is not available."
 
 
+@router.get("/explain/{sport}/{explainer_id:path}/context")
+def explain_context(sport: str, explainer_id: str):
+    """Forward to the explainer's no-model `/context` route, under every rule of `explain`.
+
+    Declared BEFORE the catch-all: `{explainer_id:path}` would otherwise swallow
+    `<id>/context` and forward it to the summary route as an id.
+    """
+    return _forward(sport, explainer_id, "/context")
+
+
 @router.get("/explain/{sport}/{explainer_id:path}")
 def explain(sport: str, explainer_id: str):
+    """Forward to the explainer's summary route; see `_forward` for the guarantees."""
+    return _forward(sport, explainer_id, "")
+
+
+def _forward(sport: str, explainer_id: str, suffix: str):
     """Forward to the explainer, or say plainly that it could not be reached.
 
     No upstream body is ever returned, on any status: a 2xx is the only thing
@@ -85,7 +100,7 @@ def explain(sport: str, explainer_id: str):
     # as a 502 like every other failure so the site has one shape to handle.
     if ".." in sport or ".." in explainer_id or "/" in sport or not explainer_id or explainer_id.startswith("/"):
         raise HTTPException(status_code=502, detail=_UNAVAILABLE)
-    url = f"{EXPLAINER_URL}/explain/{quote(sport, safe='')}/{quote(explainer_id, safe='')}"
+    url = f"{EXPLAINER_URL}/explain/{quote(sport, safe='')}/{quote(explainer_id, safe='')}{suffix}"
     try:
         response = requests.get(url, timeout=EXPLAINER_TIMEOUT_S, allow_redirects=False)
         if not (200 <= response.status_code < 300):
