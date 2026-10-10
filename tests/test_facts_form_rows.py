@@ -10,6 +10,25 @@ from f1_predictor.data import jolpica
 
 SEASON, ROUND = 2025, 20
 
+#: The display name each constructor id must render as. These are the names
+#: the sport uses, not the ids: the id is jolpica's `constructorId` (verified
+#: against the committed 2025 results cache in `test_constructor_names_cover_
+#: every_id_in_the_real_cache`), and the display name is what a reader expects
+#: to see. `mclaren`, `rb` and `sauber` are the three the title-cased id got
+#: wrong; the rest exist so the map is the whole current grid, not a patch list.
+EXPECTED_TEAM_NAMES = {
+    "alpine": "Alpine",
+    "aston_martin": "Aston Martin",
+    "ferrari": "Ferrari",
+    "haas": "Haas",
+    "mclaren": "McLaren",
+    "mercedes": "Mercedes",
+    "rb": "Racing Bulls",
+    "red_bull": "Red Bull",
+    "sauber": "Sauber",
+    "williams": "Williams",
+}
+
 
 @pytest.fixture(autouse=True)
 def offline(monkeypatch):
@@ -72,3 +91,33 @@ def test_facts_route_emits_form_rows(frames, monkeypatch):
     rows = body["context"]["form_rows"]
     assert rows and all(r["subject"] for r in rows)
     print(*rows, sep="\n")
+
+
+def test_constructor_names_cover_every_id_in_the_real_cache(frames):
+    """The committed 2025 jolpica cache for the CURRENT SEASON contains exactly
+    these constructor ids (the current grid).
+
+    Historical seasons bring in retired constructors (alfa, alphatauri); this
+    test checks only the constructors active in the 2025 season itself.
+    """
+    from f1_predictor.data import jolpica
+    results, _, _ = frames
+    # Only 2025-season results (not historical)
+    current_season = results[results["season"] == SEASON]
+    seen = {r.constructor_id for r in current_season.itertuples()}
+    assert set(EXPECTED_TEAM_NAMES) == seen, (
+        f"2025 cache has new/removed constructor ids: got {sorted(seen)}, expected {sorted(EXPECTED_TEAM_NAMES)}"
+    )
+
+
+def test_form_rows_constructor_subject_uses_display_name_not_id(frames):
+    results, schedule, quali = frames
+    field = _field(results)
+    # seed team form so the team rows exist
+    rows = facts_mod._form_rows(field, SEASON, ROUND, results, schedule, quali)
+    team_rows = [r for r in rows if r["id"].startswith("team:")]
+    assert team_rows, "at least one team row expected"
+    for r in team_rows:
+        assert r["subject"] == EXPECTED_TEAM_NAMES[r["id"].split(":")[1]], (
+            f"{r['id']} subject {r['subject']!r} != expected {EXPECTED_TEAM_NAMES[r['id'].split(':')[1]]!r}"
+        )
