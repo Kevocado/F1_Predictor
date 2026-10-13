@@ -58,6 +58,13 @@ jobs:
           restore-keys: |
             data-cache-
 
+      # The restore overwrites checked-out files with whatever an older run
+      # re-fetched. Open-Meteo archive values drift between fetches, which made
+      # the 2022-2025 walk-forward folds irreproducible (see
+      # tests/test_weather_history_is_committed.py), so the committed weather wins.
+      - name: Keep committed weather
+        run: git checkout -- data/cache/open_meteo
+
       - name: Is there a new completed race?
         id: needed
         env:
@@ -121,6 +128,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f models/*.json
+          # Freeze weather of races that have been run (never forecasts or
+          # failed-fetch nulls) so the next baseline reproduces this one.
+          today=$(date -u +%F)
+          for f in data/cache/open_meteo/*.json; do
+            d=$(basename "$f"); d=${d:0:10}
+            if [[ "$d" < "$today" ]] && ! grep -q '^null' "$f"; then git add -f "$f"; fi
+          done
           if git diff --cached --quiet; then
             echo "No change, nothing to push."
             exit 0
