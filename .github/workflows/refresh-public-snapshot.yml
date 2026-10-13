@@ -127,7 +127,7 @@ jobs:
 
           git add data/public_snapshot.json
           git add -f data/tracking.db
-          git add data/session_results_seen.json
+          if [ -f data/session_results_seen.json ]; then git add data/session_results_seen.json; fi
           if git diff --cached --quiet; then
             echo "No change, nothing to push."
             exit 0
