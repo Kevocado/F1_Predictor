@@ -13,12 +13,40 @@ name: Refresh public snapshot
 # snapshot-then-reconcile work against tracking.db on every run of this
 # workflow (see its module docstring) -- this step only commits the result.
 
+# Two cadences (cron is always UTC; GitHub may delay a scheduled run by
+# several minutes under load and may drop one entirely, so nothing here
+# depends on an exact firing time):
+#
+#   1. "40 */6 * * *"  -- the original baseline. ALWAYS does a full build,
+#      so a missed/late result is never more than ~6h stale, and a gate
+#      failure can never cost correctness.
+#   2. Race-weekend cron -- every 20 minutes from Fri 08:00 through Sun
+#      23:59 UTC. Qualifying, sprint and race are the sessions that change
+#      predictions (grid / quali_position); the latest one of any round
+#      finishes before Sun ~23:00 UTC, and Fri-before-08:00 sessions are
+#      practice only (not a model input). These runs are GATED:
+#      weekend_gate.py asks Jolpica whether a qualifying/sprint/race result
+#      exists that the last successful build has not handled. If not, the
+#      run stops after a few cheap requests -- no rebuild, no commit.
+#
+# Rate-limit rationale: Jolpica's unauthenticated limit is ~4 req/s burst,
+# 500 req/h. A gate-only run is <= 3 requests per round in the weekend
+# window (one round), ~9 req/h at 3 ticks/h. The expensive full build runs
+# once per newly landed result, not per tick. 20 minutes (not 5) keeps
+# Actions minutes low: a no-op tick is dominated by runner setup.
 on:
   schedule:
-    # F1 race weekends are ~2 weeks apart; every 6 hours on any day covers
-    # a session result landing without needing a race-calendar-aware cron.
     - cron: "40 */6 * * *"
+    - cron: "*/20 8-23 * * 5"
+    - cron: "*/20 * * * 6"
+    - cron: "*/20 * * * 0"
   workflow_dispatch: {}
+
+# Two overlapping runs once corrupted the snapshot (see push step). Queue,
+# don't cancel: a cancelled build would skip recording its results.
+concurrency:
+  group: refresh-public-snapshot
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -42,18 +70,45 @@ jobs:
       # unauthenticated rate limit. A fresh checkout starts with none of
       # it except the immutable past-season jolpica cache baked into the
       # repo itself.
+      # restore + conditional save (instead of actions/cache) so a no-op
+      # weekend tick does not write a new cache entry every 20 minutes.
       - name: Restore data cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: data/cache
           key: data-cache-${{ github.run_id }}
           restore-keys: |
             data-cache-
 
+      # Only the weekend crons are gated; the 6-hourly cron and manual
+      # dispatch always build (a failed gate there is ignored).
+      - name: Gate (new session result?)
+        id: gate
+        env:
+          IS_WEEKEND_TICK: ${{ github.event_name == 'schedule' && github.event.schedule != '40 */6 * * *' }}
+        run: |
+          if [ "$IS_WEEKEND_TICK" = "true" ]; then
+            python -m f1_predictor.weekend_gate check
+          else
+            python -m f1_predictor.weekend_gate check || true
+            echo "refresh=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build snapshot
-        run: python -m f1_predictor.public_snapshot
+        if: steps.gate.outputs.refresh == 'true'
+        run: |
+          python -m f1_predictor.public_snapshot
+          python -m f1_predictor.weekend_gate record
+
+      - name: Save data cache
+        if: steps.gate.outputs.refresh == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/cache
+          key: data-cache-${{ github.run_id }}
 
       - name: Commit and push if changed
+        if: steps.gate.outputs.refresh == 'true'
         # Confirmed directly (not theoretical): an overlapping run once
         # produced a real git merge conflict in public_snapshot.json that
         # got committed with literal <<<<<<< markers still in it, breaking
@@ -72,6 +127,7 @@ jobs:
 
           git add data/public_snapshot.json
           git add -f data/tracking.db
+          if [ -f data/session_results_seen.json ]; then git add data/session_results_seen.json; fi
           if git diff --cached --quiet; then
             echo "No change, nothing to push."
             exit 0
