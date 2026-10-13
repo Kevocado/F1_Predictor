@@ -1,5 +1,5 @@
 {
-  "trained_at": "2026-09-23T13:40:05.686415+00:00",
+  "trained_at": "2026-10-13T19:40:16.440199+00:00",
   "seasons": [
     2019,
     2020,
@@ -10,6 +10,10 @@
     2025,
     2026
   ],
+  "last_race": {
+    "season": 2026,
+    "round": 17
+  },
   "feature_cols": [
     "elo_pre_race",
     "team_strength_pre_race",
@@ -56,10 +60,10 @@
     "reg_lambda": 0.015013182315032979
   },
   "race_outcome_candidate_metrics": {
-    "elo_last_fold_log_loss": 0.1637919554406006,
-    "xgb_ranker_last_fold_log_loss": 0.11283611931534397,
-    "elo_mean_log_loss": 0.13846966642232075,
-    "xgb_ranker_mean_log_loss": 0.1300898445792343
+    "elo_last_fold_log_loss": 0.15493795668444696,
+    "xgb_ranker_last_fold_log_loss": 0.10832220409662516,
+    "elo_mean_log_loss": 0.13669886667109002,
+    "xgb_ranker_mean_log_loss": 0.13002417696310348
   },
   "walk_forward_folds": {
     "elo": [
@@ -89,53 +93,53 @@
       },
       {
         "val_season": 2026,
-        "n_races": 14,
-        "log_loss": 0.1637919554406006,
-        "brier": 0.044623020923520926
+        "n_races": 17,
+        "log_loss": 0.15493795668444696,
+        "brier": 0.04262897445038622
       }
     ],
     "xgb_ranker": [
       {
         "val_season": 2022,
         "n_races": 22,
-        "log_loss": 0.1598700577894407,
-        "brier": 0.0449459191919192
+        "log_loss": 0.15700831820483963,
+        "brier": 0.04466143636363636
       },
       {
         "val_season": 2023,
         "n_races": 22,
-        "log_loss": 0.11731367410817543,
-        "brier": 0.03299256363636363
+        "log_loss": 0.11962783483142184,
+        "brier": 0.03362943787878788
       },
       {
         "val_season": 2024,
         "n_races": 24,
-        "log_loss": 0.14284263064510558,
-        "brier": 0.039819970772442585
+        "log_loss": 0.13874261826842615,
+        "brier": 0.039578885641382504
       },
       {
         "val_season": 2025,
         "n_races": 24,
-        "log_loss": 0.11758674103810585,
-        "brier": 0.034586595685455815
+        "log_loss": 0.12641990941420453,
+        "brier": 0.03735884574344699
       },
       {
         "val_season": 2026,
-        "n_races": 14,
-        "log_loss": 0.11283611931534397,
-        "brier": 0.03261002958152958
+        "n_races": 17,
+        "log_loss": 0.10832220409662516,
+        "brier": 0.030947813428401666
       }
     ]
   },
   "session_models": {
     "sprint_qualifying": {
-      "n_training_rows": 590
+      "n_training_rows": 612
     },
     "qualifying": {
-      "n_training_rows": 3338
+      "n_training_rows": 3404
     },
     "sprint": {
-      "n_training_rows": 590
+      "n_training_rows": 612
     }
   }
 }
