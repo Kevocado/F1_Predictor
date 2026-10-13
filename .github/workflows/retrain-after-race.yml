@@ -1,0 +1,137 @@
+name: Retrain after race
+
+# Retrains every model on all seasons through the latest completed race and
+# commits models/*.json + manifest.json ONLY if the candidate is not worse
+# than the committed model on the same walk-forward folds
+# (src/f1_predictor/retrain_gate.py: exact tolerances and rule in its
+# docstring). If worse, the committed models are left untouched and the
+# comparison is uploaded as an artifact + shown in the run summary.
+#
+# Schedule (UTC, best-effort -- GitHub can delay or drop a run): Monday and
+# Tuesday 08:30. Races finish Sunday, Jolpica publishes results within
+# hours, so Monday normally trains; Tuesday is the retry for a late result
+# or a failed run. Both are cheap no-ops when `retrain_gate needed` finds no
+# completed race newer than manifest.json's last_race. No admin endpoint and
+# no VPS access: the snapshot job (refresh-public-snapshot.yml) reads
+# models/*.json from the repo, so it picks the new models up on its next
+# run (a GITHUB_TOKEN push does not trigger other workflows; the 6-hourly
+# cron always builds). The Azure deploy workflow likewise does not fire on
+# this push -- the running API keeps its old in-process models until its next
+# deploy, an accepted lag (served predictions come from the snapshot).
+
+on:
+  schedule:
+    - cron: "30 8 * * 1,2"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Retrain even if no new completed race (the accuracy gate still applies)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: retrain-after-race
+  cancel-in-progress: false
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - run: pip install -e .
+
+      - name: Restore data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data/cache
+          key: data-cache-${{ github.run_id }}
+          restore-keys: |
+            data-cache-
+
+      - name: Is there a new completed race?
+        id: needed
+        env:
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          if python -m f1_predictor.retrain_gate needed; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          elif [ "$FORCE" = "true" ]; then
+            echo "forced"; echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "No new completed race since the committed models; nothing to do." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Train candidate (walk-forward + final fit)
+        if: steps.needed.outputs.go == 'true'
+        run: |
+          cp models/manifest.json "$RUNNER_TEMP/manifest.current.json"
+          python -m f1_predictor.models.manifest
+
+      - name: Gate candidate against the committed model
+        id: gate
+        if: steps.needed.outputs.go == 'true'
+        run: |
+          set +e
+          python -m f1_predictor.retrain_gate compare "$RUNNER_TEMP/manifest.current.json" models/manifest.json
+          code=$?
+          cat retrain_summary.md >> "$GITHUB_STEP_SUMMARY"
+          cp models/manifest.json candidate_manifest.json
+          if [ $code -eq 0 ]; then
+            echo "accept=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "accept=false" >> "$GITHUB_OUTPUT"
+            # keep the old model: discard everything train_all wrote
+            git checkout -- models
+          fi
+          exit 0
+
+      - name: Upload comparison
+        if: steps.needed.outputs.go == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: retrain-comparison
+          path: |
+            retrain_summary.md
+            candidate_manifest.json
+
+      - name: Save data cache
+        if: steps.needed.outputs.go == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/cache
+          key: data-cache-${{ github.run_id }}
+
+      - name: Commit and push if accepted
+        if: steps.gate.outputs.accept == 'true'
+        # Same safe pattern as refresh-public-snapshot.yml: rebase before
+        # push, retry once on a concurrent push, never force.
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f models/*.json
+          if git diff --cached --quiet; then
+            echo "No change, nothing to push."
+            exit 0
+          fi
+          git commit -m "Retrain models after latest race [automated]"
+          for attempt in 1 2; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) -- pulling and retrying..."
+            git pull --rebase
+          done
+          echo "Push failed after retry." >&2
+          exit 1

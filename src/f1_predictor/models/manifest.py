@@ -37,6 +37,16 @@ SESSION_MODEL_PATHS: dict[str, tuple] = {
 }
 
 
+_MANIFEST_PARAM_KEYS = {"race_outcome_ranker": "tuned_ranker_params", "dnf_model": "tuned_dnf_params"}
+
+
+def _committed_tuned_params(study_name: str) -> dict | None:
+    try:
+        return json.loads(MANIFEST_PATH.read_text()).get(_MANIFEST_PARAM_KEYS[study_name])
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def _load_tuned_params(study_name: str) -> dict | None:
     """Best hyperparameters from an evaluate/tune_hyperparams.py Optuna
     study, if one has been run — None (production defaults) if no study
@@ -44,7 +54,10 @@ def _load_tuned_params(study_name: str) -> dict | None:
     treated the same as "not tuned yet," never a hard failure — training
     should still work with zero tuning history."""
     if not OPTUNA_DB_PATH.exists():
-        return None
+        # optuna_studies.db is gitignored, so CI (the post-race retrain) never
+        # has it. Keep the hyperparameters the committed manifest was tuned
+        # with instead of silently regressing to untuned defaults.
+        return _committed_tuned_params(study_name)
     try:
         import optuna
 
@@ -117,6 +130,12 @@ def train_all(seasons: list[int] | None = None) -> dict:
     manifest = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "seasons": seasons,
+        # latest completed race in the training data; retrain_gate.needs_retrain
+        # compares this to the latest completed race to decide whether to retrain.
+        "last_race": {
+            "season": int(df["season"].max()),
+            "round": int(df.loc[df["season"] == df["season"].max(), "round"].max()),
+        },
         "feature_cols": feature_cols,
         "race_outcome_candidate": chosen,
         "tuned_ranker_params": ranker_params,
