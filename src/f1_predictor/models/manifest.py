@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from ..config import MODELS_DIR
 from ..data import jolpica
 from ..evaluate import walk_forward
+from ..evaluate.grid_calibration import fit_calibration_on_full_history
 from ..features import session_build, session_state
 from ..features.build import build_training_frame
 from . import dnf as dnf_model
@@ -127,6 +128,13 @@ def train_all(seasons: list[int] | None = None) -> dict:
     dnf_clf = dnf_model.train_dnf_model(post_quali, feature_cols, hyperparams=dnf_params)
     dnf_clf.save_model(str(DNF_MODEL_PATH))
 
+    print("Fitting calibration parameters on full history...")
+    calibration_params = fit_calibration_on_full_history(
+        post_quali, chosen, feature_cols, hyperparams=ranker_params
+    )
+    print(f"Calibration params: a_win={calibration_params['a_win']:.4f}, b_win={calibration_params['b_win']:.4f}, "
+          f"a_podium={calibration_params['a_podium']:.4f}, b_podium={calibration_params['b_podium']:.4f}")
+
     print("Training the 3 new session predictors (sprint_qualifying, qualifying, sprint)...")
     session_metrics: dict[str, dict] = {}
     for session_type, (model_path, dnf_path) in SESSION_MODEL_PATHS.items():
@@ -156,6 +164,8 @@ def train_all(seasons: list[int] | None = None) -> dict:
         "race_outcome_candidate": chosen,
         "tuned_ranker_params": ranker_params,
         "tuned_dnf_params": dnf_params,
+        # Calibration params for 2-parameter grid calibration (win/podium)
+        "calibration_params": calibration_params,
         "race_outcome_candidate_metrics": {
             "elo_last_fold_log_loss": elo_last,
             "xgb_ranker_last_fold_log_loss": xgb_last,

@@ -359,3 +359,82 @@ if __name__ == "__main__":
     print("\nCalibrated xgb_ranker:")
     cal_results = evaluate_calibrated_candidate(folds, "xgb_ranker")
     print(cal_results.to_string(index=False))
+
+
+def fit_calibration_on_full_history(
+    train_df: pd.DataFrame,
+    candidate: str,
+    feature_cols: list[str],
+    hyperparams: dict | None = None,
+    n_trials: int = 3000,
+) -> dict:
+    """Fit calibration parameters on the FULL training data (used for production serving).
+
+    Returns dict with win_rates, podium_rates, and calibration params (a_win, b_win, a_podium, b_podium).
+    """
+    from ..models import dnf as dnf_model
+
+    # Train the candidate model on full training data
+    ranker = (
+        race_outcome.train_ranker(train_df, feature_cols, hyperparams=hyperparams)
+        if candidate == "xgb_ranker"
+        else None
+    )
+
+    # Compute grid lookup rates from full training data
+    win_rates, podium_rates = compute_grid_lookup(train_df)
+
+    # Collect predictions on ALL training data for calibration fitting
+    train_model_win = []
+    train_grid_win = []
+    train_true_win = []
+    train_model_podium = []
+    train_grid_podium = []
+    train_true_podium = []
+
+    for _season, _round_, race in race_df_groups(train_df):
+        if race["grid"].isna().all():
+            continue
+        if candidate == "elo":
+            theta = race_outcome.theta_from_elo_strength(race_outcome.elo_strengths(race))
+        else:
+            theta = race_outcome.theta_from_xgb_scores(
+                race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
+            )
+        sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
+        win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
+
+        winners = race.loc[race["position"] == 1, "driver_id"]
+        winner = winners.iloc[0] if not winners.empty else None
+        podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
+
+        for d in race["driver_id"]:
+            if d not in sim.index or d not in win_probs_grid:
+                continue
+            train_model_win.append(sim.loc[d, "p_win"])
+            train_grid_win.append(win_probs_grid[d])
+            train_true_win.append(1 if d == winner else 0)
+            train_model_podium.append(sim.loc[d, "p_podium"])
+            train_grid_podium.append(podium_probs_grid[d])
+            train_true_podium.append(1 if d in podium_finishers else 0)
+
+    # Fit calibration parameters on all training data
+    if len(train_model_win) > 10:
+        a_win, b_win = fit_calibration_params(
+            np.array(train_model_win), np.array(train_grid_win), np.array(train_true_win)
+        )
+        a_podium, b_podium = fit_calibration_params(
+            np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium)
+        )
+    else:
+        a_win, b_win = 1.0, 0.0
+        a_podium, b_podium = 1.0, 0.0
+
+    return {
+        "win_rates": win_rates.tolist(),
+        "podium_rates": podium_rates.tolist(),
+        "a_win": a_win,
+        "b_win": b_win,
+        "a_podium": a_podium,
+        "b_podium": b_podium,
+    }

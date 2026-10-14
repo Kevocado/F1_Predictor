@@ -18,9 +18,10 @@ models/manifest.py selects on). Folds are matched by val_season:
     left out of the mean and only held to a loose sanity bound LIVE_TOL.
   * folds only in the candidate (a new season) are ignored.
 
-  * GRID LOOKUP FLOOR: candidate must not be worse than the grid lookup
-    baseline on any comparable fold (delta <= GRID_TOL). This prevents
-    deploying a model that loses to a simple grid-position heuristic.
+  * GRID LOOKUP FLOOR: the served model (calibrated if calibration_params
+    exists, otherwise raw) must not be worse than the grid lookup baseline
+    on any comparable fold (delta <= GRID_TOL). This prevents deploying a
+    model that loses to a simple grid-position heuristic.
 
 Honest limit: walk-forward trains each fold on EARLIER seasons only, so a
 new race in the current season changes only the last (grown) fold's
@@ -39,13 +40,17 @@ from pathlib import Path
 MEAN_TOL = 0.002   # mean log-loss may rise by at most this over comparable folds
 FOLD_TOL = 0.01    # ... and no single comparable fold by more than this
 LIVE_TOL = 0.03    # sanity bound for the grown (in-progress season) fold
-GRID_TOL = 0.000   # candidate must not be worse than grid lookup (delta <= 0)
+GRID_TOL = 0.000   # served model must not be worse than grid lookup (delta <= 0)
 
 
 def _folds(manifest: dict, key: str | None = None) -> dict[int, dict]:
-    """Extract folds from manifest. If key is None, uses the chosen candidate."""
+    """Extract folds from manifest. If key is None, uses the served model's folds."""
     if key is None:
-        key = manifest["race_outcome_candidate"]
+        # If calibration params exist, the served model is the calibrated one
+        if manifest.get("calibration_params") is not None:
+            key = "calibrated"
+        else:
+            key = manifest["race_outcome_candidate"]
     return {int(f["val_season"]): f for f in manifest["walk_forward_folds"].get(key, [])}
 
 

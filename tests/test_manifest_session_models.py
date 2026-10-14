@@ -31,9 +31,10 @@ def test_train_all_trains_and_saves_session_models(tmp_path, monkeypatch):
                         "season": 2024, "round": rnd, "driver_id": driver, "constructor_id": f"t{i % 2}",
                         "tier": "post_qualifying", "position": i, "dnf": False,
                         "elo_pre_race": 1600 - i * 5, "team_strength_pre_race": 1500.0,
+                        "grid": i,  # needed for grid calibration
                     }
                 )
-        return pd.DataFrame(rows), ["elo_pre_race", "team_strength_pre_race"]
+        return pd.DataFrame(rows), ["elo_pre_race", "team_strength_pre_race", "grid"]
 
     def _fake_session_frame(session_type, seasons=None):
         rows = []

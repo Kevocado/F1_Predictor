@@ -12,6 +12,7 @@ import logging
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import requests
 import xgboost as xgb
@@ -172,7 +173,7 @@ def _require_manifest() -> dict:
     return manifest_module.load_manifest()
 
 
-def _load_models() -> tuple[str, xgb.XGBRanker | None, xgb.XGBClassifier]:
+def _load_models() -> tuple[str, xgb.XGBRanker | None, xgb.XGBClassifier, dict | None]:
     manifest = _require_manifest()
     candidate = manifest["race_outcome_candidate"]
     ranker = None
@@ -181,7 +182,9 @@ def _load_models() -> tuple[str, xgb.XGBRanker | None, xgb.XGBClassifier]:
         ranker.load_model(str(manifest_module.RACE_OUTCOME_MODEL_PATH))
     dnf_clf = xgb.XGBClassifier()
     dnf_clf.load_model(str(manifest_module.DNF_MODEL_PATH))
-    return candidate, ranker, dnf_clf
+    # Load calibration parameters (if xgb_ranker is used)
+    calibration_params = manifest.get("calibration_params") if candidate == "xgb_ranker" else None
+    return candidate, ranker, dnf_clf, calibration_params
 
 
 def _to_history_coverage(coverage: jolpica.HistoryCoverage | None) -> HistoryCoverage | None:
@@ -260,7 +263,7 @@ def _predict_upcoming_race(
     computed at all: this is the path that can lose a season to a rate limit,
     and it is the path whose output a reader is shown."""
     future_df, tier, coverage = _future_feature_frame(season, round_, race_row)
-    candidate, ranker, dnf_clf = _load_models()
+    candidate, ranker, dnf_clf, calibration_params = _load_models()
     if candidate == "xgb_ranker":
         scores = race_outcome.xgb_scores_for_race(ranker, future_df, build_features.FEATURE_COLUMNS)
         theta = race_outcome.theta_from_xgb_scores(scores)
@@ -269,6 +272,30 @@ def _predict_upcoming_race(
 
     dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, future_df, build_features.FEATURE_COLUMNS)
     sim = race_outcome.simulate_race(theta, dnf_prob, n_trials=10000)
+
+    # Apply 2-parameter grid calibration for win/podium if available
+    if calibration_params is not None:
+        from ..evaluate.grid_calibration import grid_lookup_probs, apply_calibration
+
+        win_rates = np.array(calibration_params["win_rates"])
+        podium_rates = np.array(calibration_params["podium_rates"])
+        win_probs_grid, podium_probs_grid = grid_lookup_probs(future_df, win_rates, podium_rates)
+
+        model_win = {row["driver_id"]: row["p_win"] for _, row in sim.iterrows()}
+        model_podium = {row["driver_id"]: row["p_podium"] for _, row in sim.iterrows()}
+
+        cal_win = apply_calibration(
+            model_win, win_probs_grid,
+            calibration_params["a_win"], calibration_params["b_win"]
+        )
+        cal_podium = apply_calibration(
+            model_podium, podium_probs_grid,
+            calibration_params["a_podium"], calibration_params["b_podium"]
+        )
+
+        # Update sim with calibrated probabilities
+        sim["p_win"] = sim["driver_id"].map(cal_win)
+        sim["p_podium"] = sim["driver_id"].map(cal_podium)
 
     constructor_lookup = future_df.set_index("driver_id")["constructor_id"]
     sim["constructor_id"] = sim["driver_id"].map(constructor_lookup)
