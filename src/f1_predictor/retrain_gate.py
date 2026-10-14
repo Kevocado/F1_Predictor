@@ -18,6 +18,10 @@ models/manifest.py selects on). Folds are matched by val_season:
     left out of the mean and only held to a loose sanity bound LIVE_TOL.
   * folds only in the candidate (a new season) are ignored.
 
+  * GRID LOOKUP FLOOR: candidate must not be worse than the grid lookup
+    baseline on any comparable fold (delta <= GRID_TOL). This prevents
+    deploying a model that loses to a simple grid-position heuristic.
+
 Honest limit: walk-forward trains each fold on EARLIER seasons only, so a
 new race in the current season changes only the last (grown) fold's
 validation set -- the gate mostly guards against regressions from data or
@@ -35,15 +39,19 @@ from pathlib import Path
 MEAN_TOL = 0.002   # mean log-loss may rise by at most this over comparable folds
 FOLD_TOL = 0.01    # ... and no single comparable fold by more than this
 LIVE_TOL = 0.03    # sanity bound for the grown (in-progress season) fold
+GRID_TOL = 0.000   # candidate must not be worse than grid lookup (delta <= 0)
 
 
-def _folds(manifest: dict) -> dict[int, dict]:
-    chosen = manifest["race_outcome_candidate"]
-    return {int(f["val_season"]): f for f in manifest["walk_forward_folds"][chosen]}
+def _folds(manifest: dict, key: str | None = None) -> dict[int, dict]:
+    """Extract folds from manifest. If key is None, uses the chosen candidate."""
+    if key is None:
+        key = manifest["race_outcome_candidate"]
+    return {int(f["val_season"]): f for f in manifest["walk_forward_folds"].get(key, [])}
 
 
 def compare(current: dict, candidate: dict) -> dict:
     cur, cand = _folds(current), _folds(candidate)
+    grid_cur = _folds(current, "grid_lookup")
     reasons: list[str] = []
     rows: list[dict] = []
     comparable_deltas: list[float] = []
@@ -68,6 +76,12 @@ def compare(current: dict, candidate: dict) -> dict:
             comparable_deltas.append(delta)
             if delta > FOLD_TOL:
                 reasons.append(f"fold {season}: log_loss +{delta:.4f} > {FOLD_TOL}")
+            # Grid lookup floor: candidate must not be worse than grid lookup
+            g = grid_cur.get(season)
+            if g is not None and not math.isnan(g["log_loss"]):
+                grid_delta = n["log_loss"] - g["log_loss"]
+                if grid_delta > GRID_TOL:
+                    reasons.append(f"fold {season}: candidate worse than grid lookup by +{grid_delta:.4f} > {GRID_TOL}")
         rows.append({"val_season": season, "kind": kind, "n_races": [c["n_races"], n["n_races"]],
                      "log_loss": [c["log_loss"], n["log_loss"]], "delta": delta})
     mean_delta = sum(comparable_deltas) / len(comparable_deltas) if comparable_deltas else 0.0
@@ -83,12 +97,18 @@ def summary_markdown(current: dict, candidate: dict, result: dict) -> str:
         f"current trained_at `{current['trained_at']}` ({current['race_outcome_candidate']}) -> "
         f"candidate `{candidate['trained_at']}` ({candidate['race_outcome_candidate']})",
         "",
-        "| val season | kind | races (cur/cand) | log_loss cur | log_loss cand | delta |",
-        "|---|---|---|---|---|---|",
+        "| val season | kind | races (cur/cand) | log_loss cur | log_loss cand | delta | grid_delta |",
+        "|---|---|---|---|---|---|---|",
     ]
+    grid_cur = _folds(current, "grid_lookup")
     for r in result["rows"]:
+        grid_delta_str = ""
+        g = grid_cur.get(r["val_season"])
+        if g is not None and not math.isnan(g["log_loss"]):
+            grid_delta = r["log_loss"][1] - g["log_loss"]
+            grid_delta_str = f"{grid_delta:+.4f}"
         lines.append(f"| {r['val_season']} | {r['kind']} | {r['n_races'][0]}/{r['n_races'][1]} | "
-                     f"{r['log_loss'][0]:.4f} | {r['log_loss'][1]:.4f} | {r['delta']:+.4f} |")
+                     f"{r['log_loss'][0]:.4f} | {r['log_loss'][1]:.4f} | {r['delta']:+.4f} | {grid_delta_str} |")
     lines += ["", f"mean delta (comparable folds): {result['mean_delta']:+.4f} (tolerance {MEAN_TOL})"]
     lines += [f"- {x}" for x in result["reasons"]]
     return "\n".join(lines) + "\n"

@@ -30,6 +30,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
     "circuit_history": [c for c in FEATURE_COLUMNS if "circuit" in c],
     "weather": ["temp_max_c", "precipitation_mm", "wind_max_kph"],
     "qualifying": ["grid", "quali_position", "quali_gap_to_pole"],
+    "quali_history": ["quali_avg_position_3", "quali_avg_gap_to_pole_3", "teammate_quali_gap"],
 }
 
 

@@ -28,7 +28,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..data import jolpica
-from . import circuit, elo, rolling_form, safety_car, team_strength
+from . import circuit, elo, quali_history, rolling_form, safety_car, team_strength
 from . import weather as weather_features
 
 BASE_SESSION_FEATURES = [
@@ -54,9 +54,15 @@ BASE_SESSION_FEATURES = [
     "wind_max_kph",
 ]
 
+QUALI_HISTORY_FEATURES = [
+    "quali_avg_position_3",
+    "quali_avg_gap_to_pole_3",
+    "teammate_quali_gap",
+]
+
 SESSION_FEATURE_COLUMNS: dict[str, list[str]] = {
     "sprint_qualifying": list(BASE_SESSION_FEATURES),
-    "qualifying": list(BASE_SESSION_FEATURES) + ["sprint_finish_position"],
+    "qualifying": list(BASE_SESSION_FEATURES) + ["sprint_finish_position"] + QUALI_HISTORY_FEATURES,
     "sprint": list(BASE_SESSION_FEATURES) + ["sprint_quali_position"],
 }
 
@@ -115,6 +121,12 @@ def build_session_training_frame(
     df = df.merge(circuit_hist.drop(columns=["constructor_id"]), on=["season", "round", "driver_id"], how="left")
     df = df.merge(dnf_rate_hist.drop(columns=["circuit_id"]), on=["season", "round"], how="left")
     df = df.merge(weather_feat, on=["season", "round"], how="left")
+
+    # Add qualifying history features for qualifying session type
+    if session_type == "qualifying":
+        quali_df = pd.concat([jolpica.load_season_qualifying(s) for s in seasons], ignore_index=True)
+        quali_hist_feat = quali_history.compute_quali_features(quali_df)
+        df = df.merge(quali_hist_feat, on=["season", "round", "driver_id"], how="left")
 
     if session_type == "qualifying":
         if sprint_results_df.empty:

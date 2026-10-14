@@ -100,10 +100,15 @@ def test_needs_retrain_uses_last_race_when_recorded(current):
 
 
 def test_needs_retrain_falls_back_to_last_fold_race_count(current):
-    # committed manifest predates last_race; its 2026 fold saw 14 races
-    assert "last_race" not in current
-    assert rg.needs_retrain(current, 2026, 15)
-    assert not rg.needs_retrain(current, 2026, 14)
+    # committed manifest predates last_race; its 2026 fold saw N races
+    # Create a manifest without last_race to test the fallback logic
+    m = {k: v for k, v in current.items() if k != "last_race"}
+    assert "last_race" not in m
+    # Find the 2026 fold's n_races
+    folds = [f for f in m["walk_forward_folds"][m["race_outcome_candidate"]] if f["val_season"] == 2026]
+    n_races = folds[-1]["n_races"] if folds else 0
+    assert rg.needs_retrain(m, 2026, n_races + 1)
+    assert not rg.needs_retrain(m, 2026, n_races)
 
 
 def test_needs_retrain_new_season_with_no_trained_races(current):

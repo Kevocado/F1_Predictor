@@ -85,6 +85,12 @@ def train_all(seasons: list[int] | None = None) -> dict:
     elo_metrics = walk_forward.evaluate_candidate(folds, "elo")
     xgb_metrics = walk_forward.evaluate_candidate(folds, "xgb_ranker", hyperparams=ranker_params)
 
+    # Also evaluate grid lookup baseline and calibrated candidate
+    print("Evaluating grid lookup baseline...")
+    grid_metrics = walk_forward.evaluate_grid_lookup(folds)
+    print("Evaluating calibrated xgb_ranker...")
+    cal_metrics = walk_forward.evaluate_calibrated_candidate(folds, "xgb_ranker", hyperparams=ranker_params)
+
     # Selection uses only the LAST fold (trained on every season but the
     # most recent — the most historical data of any fold, closest to what
     # actually gets trained below). The multi-fold average is a separate
@@ -102,6 +108,16 @@ def train_all(seasons: list[int] | None = None) -> dict:
     chosen = "elo" if elo_last <= xgb_last else "xgb_ranker"
     print(f"Multi-fold mean log-loss  — elo: {elo_avg:.4f}, xgb_ranker: {xgb_avg:.4f}")
     print(f"Last-fold (selection) log-loss — elo: {elo_last:.4f}, xgb_ranker: {xgb_last:.4f} -> chosen: {chosen}")
+
+    # Grid lookup baseline for retrain gate comparison
+    grid_last = float(grid_metrics.iloc[-1]["log_loss"]) if not grid_metrics.empty else float("inf")
+    grid_avg = float(grid_metrics["log_loss"].mean()) if not grid_metrics.empty else float("inf")
+    print(f"Grid lookup baseline log-loss — last fold: {grid_last:.4f}, mean: {grid_avg:.4f}")
+
+    # Calibrated candidate (informational; not used for selection yet)
+    cal_last = float(cal_metrics.iloc[-1]["log_loss"]) if not cal_metrics.empty else float("inf")
+    cal_avg = float(cal_metrics["log_loss"].mean()) if not cal_metrics.empty else float("inf")
+    print(f"Calibrated xgb_ranker log-loss — last fold: {cal_last:.4f}, mean: {cal_avg:.4f}")
 
     print("Training final race_outcome ranker on full history...")
     ranker = race_outcome.train_ranker(post_quali, feature_cols, hyperparams=ranker_params)
@@ -145,10 +161,16 @@ def train_all(seasons: list[int] | None = None) -> dict:
             "xgb_ranker_last_fold_log_loss": xgb_last,
             "elo_mean_log_loss": elo_avg,
             "xgb_ranker_mean_log_loss": xgb_avg,
+            "grid_lookup_last_fold_log_loss": grid_last,
+            "grid_lookup_mean_log_loss": grid_avg,
+            "calibrated_last_fold_log_loss": cal_last,
+            "calibrated_mean_log_loss": cal_avg,
         },
         "walk_forward_folds": {
             "elo": elo_metrics.to_dict(orient="records"),
             "xgb_ranker": xgb_metrics.to_dict(orient="records"),
+            "grid_lookup": grid_metrics.to_dict(orient="records"),
+            "calibrated": cal_metrics.to_dict(orient="records"),
         },
         "session_models": session_metrics,
     }

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..data import jolpica
-from . import circuit, elo, rolling_form, safety_car, session_state, team_strength
+from . import circuit, elo, quali_history, rolling_form, safety_car, session_state, team_strength
 from . import weather as weather_features
 
 FEATURE_COLUMNS = [
@@ -34,6 +34,9 @@ FEATURE_COLUMNS = [
     "grid",
     "quali_position",
     "quali_gap_to_pole",
+    "quali_avg_position_3",
+    "quali_avg_gap_to_pole_3",
+    "teammate_quali_gap",
     "temp_max_c",
     "precipitation_mm",
     "wind_max_kph",
@@ -88,6 +91,7 @@ def build_training_frame(
     circuit_hist = circuit.compute_circuit_history(results_df, schedule_df)
     dnf_rate_hist = safety_car.compute_circuit_dnf_rate(results_df, schedule_df)
     quali_feat = quali_features(quali_df)
+    quali_hist_feat = quali_history.compute_quali_features(quali_df)
     weather_feat = weather_features.compute_weather_features(schedule_df, force_refresh=weather_force_refresh)
 
     df = results_df.merge(elo_hist, on=["season", "round", "driver_id"], how="left")
@@ -97,6 +101,7 @@ def build_training_frame(
     df = df.merge(circuit_hist.drop(columns=["constructor_id"]), on=["season", "round", "driver_id"], how="left")
     df = df.merge(dnf_rate_hist.drop(columns=["circuit_id"]), on=["season", "round"], how="left")
     df = df.merge(quali_feat, on=["season", "round", "driver_id"], how="left")
+    df = df.merge(quali_hist_feat, on=["season", "round", "driver_id"], how="left")
     df = df.merge(weather_feat, on=["season", "round"], how="left")
 
     df = session_state.tier_augment(df)

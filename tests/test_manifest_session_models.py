@@ -59,12 +59,22 @@ def test_train_all_trains_and_saves_session_models(tmp_path, monkeypatch):
     monkeypatch.setattr(
         manifest.walk_forward,
         "prepare_folds",
-        lambda seasons: [{"train": pd.DataFrame(), "test": pd.DataFrame()}],
+        lambda seasons: [{"train_df": pd.DataFrame(), "val_df": pd.DataFrame(), "feature_cols": []}],
     )
     monkeypatch.setattr(
         manifest.walk_forward,
         "evaluate_candidate",
         lambda folds, candidate, hyperparams=None: pd.DataFrame([{"log_loss": 1.0}]),
+    )
+    monkeypatch.setattr(
+        manifest.walk_forward,
+        "evaluate_grid_lookup",
+        lambda folds, n_trials=3000: pd.DataFrame([{"log_loss": 1.0, "brier": 0.1}]),
+    )
+    monkeypatch.setattr(
+        manifest.walk_forward,
+        "evaluate_calibrated_candidate",
+        lambda folds, candidate, n_trials=3000, hyperparams=None: pd.DataFrame([{"log_loss": 1.0, "brier": 0.1}]),
     )
 
     result = manifest.train_all(seasons=[2024])
