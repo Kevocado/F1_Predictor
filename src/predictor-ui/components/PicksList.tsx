@@ -1,4 +1,4 @@
-// Synced from predictor-ui@1b4ca954216a. Do not edit here: change predictor-hub/packages/predictor-ui and re-run scripts/sync-ui.mjs.
+// Synced from predictor-ui@302e81061654. Do not edit here: change predictor-hub/packages/predictor-ui and re-run scripts/sync-ui.mjs.
 /**
  * The model's own top calls, ranked per category.
  *
@@ -63,9 +63,6 @@ export type OutPlayer = {
   /** When it was known, in words. Never an epoch. */
   dated: string;
 };
-
-/** Direction for NFL over/under picks. */
-export type Direction = "over" | "under" | "toss";
 
 export type PickRow = {
   /** Stable per player+category; the tile's identity and the React key. */
