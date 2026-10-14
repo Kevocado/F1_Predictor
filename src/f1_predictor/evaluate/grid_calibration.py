@@ -120,6 +120,50 @@ def fit_calibration_params(
     return float(a), float(b)
 
 
+def fit_blend_weight(
+    model_probs: np.ndarray,
+    grid_probs: np.ndarray,
+    y_true: np.ndarray,
+) -> float:
+    """Fit optimal blend weight: p_cal = w * p_model + (1-w) * p_grid.
+
+    Returns w in [0, 1]. Uses simple grid search on log-loss.
+    """
+    best_w = 0.5
+    best_loss = float('inf')
+    eps = 1e-6
+
+    for w in np.linspace(0.0, 1.0, 101):
+        p_blend = w * model_probs + (1 - w) * grid_probs
+        p_blend = np.clip(p_blend, eps, 1 - eps)
+        loss = log_loss(y_true, p_blend, labels=[0, 1])
+        if loss < best_loss:
+            best_loss = loss
+            best_w = w
+
+    return float(best_w)
+
+
+def apply_blend(
+    model_probs: dict[str, float],
+    grid_probs: dict[str, float],
+    w: float,
+    normalize_to: float | None = None,
+) -> dict[str, float]:
+    """Apply blend: p_cal = w * p_model + (1-w) * p_grid."""
+    drivers = list(model_probs.keys())
+    model_arr = np.array([model_probs[d] for d in drivers])
+    grid_arr = np.array([grid_probs[d] for d in drivers])
+
+    p_blend = w * model_arr + (1 - w) * grid_arr
+    p_blend = np.clip(p_blend, 1e-6, 1 - 1e-6)
+
+    if normalize_to is not None:
+        p_blend = p_blend / p_blend.sum() * normalize_to
+
+    return {d: float(p_blend[i]) for i, d in enumerate(drivers)}
+
+
 def apply_calibration(
     model_probs: dict[str, float],
     grid_probs: dict[str, float],
@@ -220,11 +264,10 @@ def evaluate_calibrated_candidate(
     feature_cols_override: list[str] | None = None,
     hyperparams: dict | None = None,
 ) -> pd.DataFrame:
-    """Evaluate a candidate with 2-parameter grid calibration on win/podium.
+    """Evaluate the calibrated candidate: grid lookup for win, blend for podium.
 
-    For each fold, the calibration parameters (a, b) are fitted on the
-    training seasons' out-of-fold predictions (no leakage), then applied
-    to the validation season.
+    For win market, grid lookup is the strongest predictor, so we use it directly.
+    For podium, we blend model + grid lookup with fitted weight.
     """
     from ..models import dnf as dnf_model
 
@@ -244,10 +287,7 @@ def evaluate_calibrated_candidate(
         # Compute grid lookup rates from training data
         win_rates, podium_rates = compute_grid_lookup(train_df)
 
-        # Collect out-of-fold predictions on training data for calibration fitting
-        train_model_win = []
-        train_grid_win = []
-        train_true_win = []
+        # Collect out-of-fold predictions on training data for podium blend weight
         train_model_podium = []
         train_grid_podium = []
         train_true_podium = []
@@ -262,35 +302,26 @@ def evaluate_calibrated_candidate(
                     race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
                 )
             sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
-            win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
+            _, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
-            winners = race.loc[race["position"] == 1, "driver_id"]
-            winner = winners.iloc[0] if not winners.empty else None
             podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
 
             for d in race["driver_id"]:
-                if d not in sim.index or d not in win_probs_grid:
+                if d not in sim.index or d not in podium_probs_grid:
                     continue
-                train_model_win.append(sim.loc[d, "p_win"])
-                train_grid_win.append(win_probs_grid[d])
-                train_true_win.append(1 if d == winner else 0)
                 train_model_podium.append(sim.loc[d, "p_podium"])
                 train_grid_podium.append(podium_probs_grid[d])
                 train_true_podium.append(1 if d in podium_finishers else 0)
 
-        # Fit calibration parameters on training data out-of-fold predictions
-        if len(train_model_win) > 10:
-            a_win, b_win = fit_calibration_params(
-                np.array(train_model_win), np.array(train_grid_win), np.array(train_true_win)
-            )
-            a_podium, b_podium = fit_calibration_params(
+        # Fit blend weight for podium only
+        if len(train_model_podium) > 10:
+            w_podium = fit_blend_weight(
                 np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium)
             )
         else:
-            a_win, b_win = 1.0, 0.0
-            a_podium, b_podium = 1.0, 0.0
+            w_podium = 0.0
 
-        # Evaluate on validation data with calibration applied
+        # Evaluate on validation data: grid for win, blend for podium
         y_true_win: list[int] = []
         y_pred_win: list[float] = []
         y_true_podium: list[int] = []
@@ -308,13 +339,12 @@ def evaluate_calibrated_candidate(
             sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
             win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
-            # Model probabilities
-            model_win = {d: sim.loc[d, "p_win"] for d in race["driver_id"] if d in sim.index}
+            # For win: use grid lookup directly (strongest predictor)
+            # For podium: blend model + grid
             model_podium = {d: sim.loc[d, "p_podium"] for d in race["driver_id"] if d in sim.index}
 
-            # Apply calibration
-            cal_win = apply_calibration(model_win, win_probs_grid, a_win, b_win, normalize_to=1.0)
-            cal_podium = apply_calibration(model_podium, podium_probs_grid, a_podium, b_podium, normalize_to=3.0)
+            cal_win = win_probs_grid  # Grid lookup for win
+            cal_podium = apply_blend(model_podium, podium_probs_grid, w_podium, normalize_to=3.0)
 
             winners = race.loc[race["position"] == 1, "driver_id"]
             winner = winners.iloc[0] if not winners.empty else None
@@ -336,10 +366,8 @@ def evaluate_calibrated_candidate(
                 "brier": np.mean((np.array(y_true_win) - np.array(y_pred_win)) ** 2),
                 "log_loss_podium": log_loss(y_true_podium, y_pred_podium, labels=[0, 1]),
                 "brier_podium": np.mean((np.array(y_true_podium) - np.array(y_pred_podium)) ** 2),
-                "cal_a_win": a_win,
-                "cal_b_win": b_win,
-                "cal_a_podium": a_podium,
-                "cal_b_podium": b_podium,
+                "blend_w_win": 0.0,  # Grid only for win
+                "blend_w_podium": w_podium,
             })
         else:
             rows.append({
@@ -349,10 +377,8 @@ def evaluate_calibrated_candidate(
                 "brier": np.nan,
                 "log_loss_podium": np.nan,
                 "brier_podium": np.nan,
-                "cal_a_win": a_win,
-                "cal_b_win": b_win,
-                "cal_a_podium": a_podium,
-                "cal_b_podium": b_podium,
+                "blend_w_win": 0.0,
+                "blend_w_podium": w_podium,
             })
 
     return pd.DataFrame(rows)
@@ -380,7 +406,7 @@ def fit_calibration_on_full_history(
 ) -> dict:
     """Fit calibration parameters on the FULL training data (used for production serving).
 
-    Returns dict with win_rates, podium_rates, and calibration params (a_win, b_win, a_podium, b_podium).
+    Returns dict with win_rates, podium_rates, and blend weights (w_win, w_podium).
     """
     from ..models import dnf as dnf_model
 
@@ -394,10 +420,7 @@ def fit_calibration_on_full_history(
     # Compute grid lookup rates from full training data
     win_rates, podium_rates = compute_grid_lookup(train_df)
 
-    # Collect predictions on ALL training data for calibration fitting
-    train_model_win = []
-    train_grid_win = []
-    train_true_win = []
+    # Collect predictions on ALL training data for podium blend weight
     train_model_podium = []
     train_grid_podium = []
     train_true_podium = []
@@ -412,39 +435,27 @@ def fit_calibration_on_full_history(
                 race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
             )
         sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
-        win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
+        _, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
-        winners = race.loc[race["position"] == 1, "driver_id"]
-        winner = winners.iloc[0] if not winners.empty else None
         podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
 
         for d in race["driver_id"]:
-            if d not in sim.index or d not in win_probs_grid:
+            if d not in sim.index or d not in podium_probs_grid:
                 continue
-            train_model_win.append(sim.loc[d, "p_win"])
-            train_grid_win.append(win_probs_grid[d])
-            train_true_win.append(1 if d == winner else 0)
             train_model_podium.append(sim.loc[d, "p_podium"])
             train_grid_podium.append(podium_probs_grid[d])
             train_true_podium.append(1 if d in podium_finishers else 0)
 
-    # Fit calibration parameters on all training data
-    if len(train_model_win) > 10:
-        a_win, b_win = fit_calibration_params(
-            np.array(train_model_win), np.array(train_grid_win), np.array(train_true_win)
-        )
-        a_podium, b_podium = fit_calibration_params(
+    # Fit blend weight for podium
+    if len(train_model_podium) > 10:
+        w_podium = fit_blend_weight(
             np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium)
         )
     else:
-        a_win, b_win = 1.0, 0.0
-        a_podium, b_podium = 1.0, 0.0
+        w_podium = 0.0
 
     return {
         "win_rates": win_rates.tolist(),
         "podium_rates": podium_rates.tolist(),
-        "a_win": a_win,
-        "b_win": b_win,
-        "a_podium": a_podium,
-        "b_podium": b_podium,
+        "w_podium": w_podium,
     }
