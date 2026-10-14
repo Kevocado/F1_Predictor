@@ -132,7 +132,7 @@ def train_all(seasons: list[int] | None = None) -> dict:
     calibration_params = fit_calibration_on_full_history(
         post_quali, chosen, feature_cols, hyperparams=ranker_params
     )
-    print(f"Calibration params: w_podium={calibration_params['w_podium']:.4f}")
+    print(f"Calibration params: a_win={calibration_params['a_win']:.4f}, b_win={calibration_params['b_win']:.4f}, a_podium={calibration_params['a_podium']:.4f}, b_podium={calibration_params['b_podium']:.4f}")
 
     print("Training the 3 new session predictors (sprint_qualifying, qualifying, sprint)...")
     session_metrics: dict[str, dict] = {}

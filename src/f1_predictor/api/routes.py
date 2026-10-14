@@ -273,22 +273,25 @@ def _predict_upcoming_race(
     dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, future_df, build_features.FEATURE_COLUMNS)
     sim = race_outcome.simulate_race(theta, dnf_prob, n_trials=10000)
 
-    # Apply calibration: grid lookup for win (strongest), blend for podium
+    # Apply 2-parameter grid calibration for win/podium if available
     if calibration_params is not None:
-        from ..evaluate.grid_calibration import grid_lookup_probs, apply_blend
+        from ..evaluate.grid_calibration import grid_lookup_probs, apply_calibration
 
         win_rates = np.array(calibration_params["win_rates"])
         podium_rates = np.array(calibration_params["podium_rates"])
         win_probs_grid, podium_probs_grid = grid_lookup_probs(future_df, win_rates, podium_rates)
 
+        model_win = {row["driver_id"]: row["p_win"] for _, row in sim.iterrows()}
         model_podium = {row["driver_id"]: row["p_podium"] for _, row in sim.iterrows()}
 
-        # Win: use grid lookup directly (strongest predictor)
-        cal_win = win_probs_grid
-        # Podium: blend model + grid
-        cal_podium = apply_blend(
+        cal_win = apply_calibration(
+            model_win, win_probs_grid,
+            calibration_params["a_win"], calibration_params["b_win"],
+            normalize_to=1.0  # win market sums to 1
+        )
+        cal_podium = apply_calibration(
             model_podium, podium_probs_grid,
-            calibration_params["w_podium"],
+            calibration_params["a_podium"], calibration_params["b_podium"],
             normalize_to=3.0  # podium market sums to 3 (top 3 drivers)
         )
 

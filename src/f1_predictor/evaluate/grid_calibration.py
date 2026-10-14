@@ -6,6 +6,8 @@ position from training data only (no leakage). The calibration layer fits
 2 parameters (per market: win, podium) on out-of-fold scores from earlier
 seasons to adjust the model's probabilities toward the grid lookup.
 
+p_cal = sigmoid(a * logit(p_model) + b * logit(p_grid))
+
 Top-10 (points finish) stays un-layered per spec.
 """
 
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 from sklearn.metrics import log_loss
 
 from ..data import jolpica
@@ -51,7 +54,7 @@ def compute_grid_lookup(train_df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]
     # Convert to rates with Laplace smoothing
     for g in range(1, MAX_GRID + 1):
         if counts[g] > 0:
-            win_rates[g] = (win_rates[g] - 1e-6 + 1) / (counts[g] + 2)  # +1/-1 for the initial 1e-6
+            win_rates[g] = (win_rates[g] - 1e-6 + 1) / (counts[g] + 2)
             podium_rates[g] = (podium_rates[g] - 1e-6 + 1) / (counts[g] + 2)
         else:
             # No data for this grid position: use a prior that decays with grid
@@ -77,91 +80,70 @@ def grid_lookup_probs(race_df: pd.DataFrame, win_rates: np.ndarray, podium_rates
     return win_probs, podium_probs
 
 
+def _logit(p: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    p = np.clip(p, eps, 1 - eps)
+    return np.log(p / (1 - p))
+
+
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    return 1 / (1 + np.exp(-x))
+
+
+def _calibrated_probs(model_logit: np.ndarray, grid_logit: np.ndarray, a: float, b: float) -> np.ndarray:
+    """Compute calibrated probabilities from logits."""
+    z = a * model_logit + b * grid_logit
+    p = _sigmoid(z)
+    return np.clip(p, 1e-6, 1 - 1e-6)
+
+
+def _calibrated_probs_normalized(model_logit: np.ndarray, grid_logit: np.ndarray, a: float, b: float, normalize_to: float) -> np.ndarray:
+    """Compute calibrated probabilities with sum constraint."""
+    z = a * model_logit + b * grid_logit
+    p = _sigmoid(z)
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    # Normalize to target sum, then clip again to ensure [0,1]
+    p = p / p.sum() * normalize_to
+    return np.clip(p, 1e-6, 1 - 1e-6)
+
+
+def _calib_loss(params: tuple[float, float], model_logit: np.ndarray, grid_logit: np.ndarray, y_true: np.ndarray, normalize_to: float | None) -> float:
+    """Log-loss for calibration parameters."""
+    a, b = params
+    if normalize_to is not None:
+        p_cal = _calibrated_probs_normalized(model_logit, grid_logit, a, b, normalize_to)
+    else:
+        p_cal = _calibrated_probs(model_logit, grid_logit, a, b)
+    return log_loss(y_true, p_cal, labels=[0, 1])
+
+
 def fit_calibration_params(
     model_probs: np.ndarray,
     grid_probs: np.ndarray,
     y_true: np.ndarray,
+    normalize_to: float | None = None,
 ) -> tuple[float, float]:
     """Fit 2-parameter calibration: p_cal = sigmoid(a * logit(p_model) + b * logit(p_grid)).
 
-    Uses simple gradient descent on log-loss. Returns (a, b).
+    Uses scipy's minimize with L-BFGS-B for robust optimization. Returns (a, b).
     """
-    # Initialize: trust the model (a=1, b=0)
-    a, b = 1.0, 0.0
-    lr = 0.01
-    eps = 1e-6
+    model_logit = _logit(model_probs)
+    grid_logit = _logit(grid_probs)
 
-    def logit(p):
-        p = np.clip(p, eps, 1 - eps)
-        return np.log(p / (1 - p))
+    # Initial guess: trust the model (a=1, b=0)
+    result = minimize(
+        _calib_loss,
+        x0=(1.0, 0.0),
+        args=(model_logit, grid_logit, y_true, normalize_to),
+        method="L-BFGS-B",
+        bounds=[(-5.0, 5.0), (-5.0, 5.0)],
+        options={"ftol": 1e-10, "gtol": 1e-8}
+    )
 
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
+    if not result.success:
+        # Fallback: return identity calibration
+        return 1.0, 0.0
 
-    model_logit = logit(model_probs)
-    grid_logit = logit(grid_probs)
-
-    for _ in range(2000):
-        z = a * model_logit + b * grid_logit
-        p_cal = sigmoid(z)
-        p_cal = np.clip(p_cal, eps, 1 - eps)
-
-        # Gradient of log-loss w.r.t a and b
-        grad_a = np.mean((p_cal - y_true) * model_logit)
-        grad_b = np.mean((p_cal - y_true) * grid_logit)
-
-        a -= lr * grad_a
-        b -= lr * grad_b
-
-        # Early stopping if gradients are tiny
-        if abs(grad_a) < 1e-6 and abs(grad_b) < 1e-6:
-            break
-
-    return float(a), float(b)
-
-
-def fit_blend_weight(
-    model_probs: np.ndarray,
-    grid_probs: np.ndarray,
-    y_true: np.ndarray,
-) -> float:
-    """Fit optimal blend weight: p_cal = w * p_model + (1-w) * p_grid.
-
-    Returns w in [0, 1]. Uses simple grid search on log-loss.
-    """
-    best_w = 0.5
-    best_loss = float('inf')
-    eps = 1e-6
-
-    for w in np.linspace(0.0, 1.0, 101):
-        p_blend = w * model_probs + (1 - w) * grid_probs
-        p_blend = np.clip(p_blend, eps, 1 - eps)
-        loss = log_loss(y_true, p_blend, labels=[0, 1])
-        if loss < best_loss:
-            best_loss = loss
-            best_w = w
-
-    return float(best_w)
-
-
-def apply_blend(
-    model_probs: dict[str, float],
-    grid_probs: dict[str, float],
-    w: float,
-    normalize_to: float | None = None,
-) -> dict[str, float]:
-    """Apply blend: p_cal = w * p_model + (1-w) * p_grid."""
-    drivers = list(model_probs.keys())
-    model_arr = np.array([model_probs[d] for d in drivers])
-    grid_arr = np.array([grid_probs[d] for d in drivers])
-
-    p_blend = w * model_arr + (1 - w) * grid_arr
-    p_blend = np.clip(p_blend, 1e-6, 1 - 1e-6)
-
-    if normalize_to is not None:
-        p_blend = p_blend / p_blend.sum() * normalize_to
-
-    return {d: float(p_blend[i]) for i, d in enumerate(drivers)}
+    return float(result.x[0]), float(result.x[1])
 
 
 def apply_calibration(
@@ -171,36 +153,19 @@ def apply_calibration(
     b: float,
     normalize_to: float | None = None,
 ) -> dict[str, float]:
-    """Apply 2-parameter calibration to model probabilities.
-
-    Args:
-        model_probs: Model probabilities per driver
-        grid_probs: Grid lookup probabilities per driver
-        a, b: Calibration parameters
-        normalize_to: If set, renormalize so sum = normalize_to (e.g., 1.0 for win, 3.0 for podium).
-                      If None, no renormalization.
-    """
+    """Apply 2-parameter calibration to model probabilities."""
     eps = 1e-6
     drivers = list(model_probs.keys())
     model_arr = np.array([model_probs[d] for d in drivers])
     grid_arr = np.array([grid_probs[d] for d in drivers])
 
-    def logit(p):
-        p = np.clip(p, eps, 1 - eps)
-        return np.log(p / (1 - p))
+    model_logit = _logit(model_arr)
+    grid_logit = _logit(grid_arr)
 
-    def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-
-    model_logit = logit(model_arr)
-    grid_logit = logit(grid_arr)
-    z = a * model_logit + b * grid_logit
-    p_cal = sigmoid(z)
-    p_cal = np.clip(p_cal, eps, 1 - eps)
-
-    # Renormalize if requested
     if normalize_to is not None:
-        p_cal = p_cal / p_cal.sum() * normalize_to
+        p_cal = _calibrated_probs_normalized(model_logit, grid_logit, a, b, normalize_to)
+    else:
+        p_cal = _calibrated_probs(model_logit, grid_logit, a, b)
 
     return {d: float(p_cal[i]) for i, d in enumerate(drivers)}
 
@@ -215,25 +180,21 @@ def evaluate_grid_lookup(folds: list[dict], n_trials: int = 3000) -> pd.DataFram
 
         y_true: list[int] = []
         y_pred_win: list[float] = []
-        y_pred_podium: list[float] = []
 
         for _season, _round_, race in race_df_groups(val_df):
             if race["grid"].isna().all():
                 continue
-            win_probs, podium_probs = grid_lookup_probs(race, win_rates, podium_rates)
+            win_probs, _ = grid_lookup_probs(race, win_rates, podium_rates)
 
             winners = race.loc[race["position"] == 1, "driver_id"]
             winner = winners.iloc[0] if not winners.empty else None
-            podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
 
             for d in race["driver_id"]:
                 if d not in win_probs:
                     continue
                 y_true.append(1 if d == winner else 0)
                 y_pred_win.append(win_probs[d])
-                y_pred_podium.append(1.0 if d in podium_finishers else 0.0)  # This is wrong - podium is multi-class
 
-        # For win market
         if y_true:
             rows.append({
                 "val_season": fold["val_season"],
@@ -264,10 +225,11 @@ def evaluate_calibrated_candidate(
     feature_cols_override: list[str] | None = None,
     hyperparams: dict | None = None,
 ) -> pd.DataFrame:
-    """Evaluate the calibrated candidate: grid lookup for win, blend for podium.
+    """Evaluate a candidate with 2-parameter grid calibration on win/podium.
 
-    For win market, grid lookup is the strongest predictor, so we use it directly.
-    For podium, we blend model + grid lookup with fitted weight.
+    For each fold, the calibration parameters (a, b) are fitted on the
+    training seasons' out-of-fold predictions (no leakage), then applied
+    to the validation season.
     """
     from ..models import dnf as dnf_model
 
@@ -287,7 +249,10 @@ def evaluate_calibrated_candidate(
         # Compute grid lookup rates from training data
         win_rates, podium_rates = compute_grid_lookup(train_df)
 
-        # Collect out-of-fold predictions on training data for podium blend weight
+        # Collect out-of-fold predictions on training data for calibration fitting
+        train_model_win = []
+        train_grid_win = []
+        train_true_win = []
         train_model_podium = []
         train_grid_podium = []
         train_true_podium = []
@@ -302,26 +267,37 @@ def evaluate_calibrated_candidate(
                     race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
                 )
             sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
-            _, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
+            win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
+            winners = race.loc[race["position"] == 1, "driver_id"]
+            winner = winners.iloc[0] if not winners.empty else None
             podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
 
             for d in race["driver_id"]:
-                if d not in sim.index or d not in podium_probs_grid:
+                if d not in sim.index or d not in win_probs_grid:
                     continue
+                train_model_win.append(sim.loc[d, "p_win"])
+                train_grid_win.append(win_probs_grid[d])
+                train_true_win.append(1 if d == winner else 0)
                 train_model_podium.append(sim.loc[d, "p_podium"])
                 train_grid_podium.append(podium_probs_grid[d])
                 train_true_podium.append(1 if d in podium_finishers else 0)
 
-        # Fit blend weight for podium only
-        if len(train_model_podium) > 10:
-            w_podium = fit_blend_weight(
-                np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium)
+        # Fit calibration parameters on training data out-of-fold predictions
+        if len(train_model_win) > 10:
+            a_win, b_win = fit_calibration_params(
+                np.array(train_model_win), np.array(train_grid_win), np.array(train_true_win),
+                normalize_to=1.0
+            )
+            a_podium, b_podium = fit_calibration_params(
+                np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium),
+                normalize_to=3.0
             )
         else:
-            w_podium = 0.0
+            a_win, b_win = 1.0, 0.0
+            a_podium, b_podium = 1.0, 0.0
 
-        # Evaluate on validation data: grid for win, blend for podium
+        # Evaluate on validation data with calibration applied
         y_true_win: list[int] = []
         y_pred_win: list[float] = []
         y_true_podium: list[int] = []
@@ -339,12 +315,13 @@ def evaluate_calibrated_candidate(
             sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
             win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
-            # For win: use grid lookup directly (strongest predictor)
-            # For podium: blend model + grid
+            # Model probabilities
+            model_win = {d: sim.loc[d, "p_win"] for d in race["driver_id"] if d in sim.index}
             model_podium = {d: sim.loc[d, "p_podium"] for d in race["driver_id"] if d in sim.index}
 
-            cal_win = win_probs_grid  # Grid lookup for win
-            cal_podium = apply_blend(model_podium, podium_probs_grid, w_podium, normalize_to=3.0)
+            # Apply calibration
+            cal_win = apply_calibration(model_win, win_probs_grid, a_win, b_win, normalize_to=1.0)
+            cal_podium = apply_calibration(model_podium, podium_probs_grid, a_podium, b_podium, normalize_to=3.0)
 
             winners = race.loc[race["position"] == 1, "driver_id"]
             winner = winners.iloc[0] if not winners.empty else None
@@ -366,8 +343,10 @@ def evaluate_calibrated_candidate(
                 "brier": np.mean((np.array(y_true_win) - np.array(y_pred_win)) ** 2),
                 "log_loss_podium": log_loss(y_true_podium, y_pred_podium, labels=[0, 1]),
                 "brier_podium": np.mean((np.array(y_true_podium) - np.array(y_pred_podium)) ** 2),
-                "blend_w_win": 0.0,  # Grid only for win
-                "blend_w_podium": w_podium,
+                "cal_a_win": a_win,
+                "cal_b_win": b_win,
+                "cal_a_podium": a_podium,
+                "cal_b_podium": b_podium,
             })
         else:
             rows.append({
@@ -377,8 +356,10 @@ def evaluate_calibrated_candidate(
                 "brier": np.nan,
                 "log_loss_podium": np.nan,
                 "brier_podium": np.nan,
-                "blend_w_win": 0.0,
-                "blend_w_podium": w_podium,
+                "cal_a_win": a_win,
+                "cal_b_win": b_win,
+                "cal_a_podium": a_podium,
+                "cal_b_podium": b_podium,
             })
 
     return pd.DataFrame(rows)
@@ -392,7 +373,7 @@ if __name__ == "__main__":
     print("Grid lookup baseline:")
     grid_results = evaluate_grid_lookup(folds)
     print(grid_results.to_string(index=False))
-    print("\nCalibrated xgb_ranker:")
+    print("\nCalibrated xgb_ranker (2-param):")
     cal_results = evaluate_calibrated_candidate(folds, "xgb_ranker")
     print(cal_results.to_string(index=False))
 
@@ -406,7 +387,7 @@ def fit_calibration_on_full_history(
 ) -> dict:
     """Fit calibration parameters on the FULL training data (used for production serving).
 
-    Returns dict with win_rates, podium_rates, and blend weights (w_win, w_podium).
+    Returns dict with win_rates, podium_rates, and calibration params (a_win, b_win, a_podium, b_podium).
     """
     from ..models import dnf as dnf_model
 
@@ -420,7 +401,10 @@ def fit_calibration_on_full_history(
     # Compute grid lookup rates from full training data
     win_rates, podium_rates = compute_grid_lookup(train_df)
 
-    # Collect predictions on ALL training data for podium blend weight
+    # Collect predictions on ALL training data for calibration fitting
+    train_model_win = []
+    train_grid_win = []
+    train_true_win = []
     train_model_podium = []
     train_grid_podium = []
     train_true_podium = []
@@ -435,27 +419,41 @@ def fit_calibration_on_full_history(
                 race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
             )
         sim = race_outcome.simulate_race(theta, dnf_prob=None, n_trials=n_trials, seed=42).set_index("driver_id")
-        _, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
+        win_probs_grid, podium_probs_grid = grid_lookup_probs(race, win_rates, podium_rates)
 
+        winners = race.loc[race["position"] == 1, "driver_id"]
+        winner = winners.iloc[0] if not winners.empty else None
         podium_finishers = set(race.loc[race["position"] <= 3, "driver_id"])
 
         for d in race["driver_id"]:
-            if d not in sim.index or d not in podium_probs_grid:
+            if d not in sim.index or d not in win_probs_grid:
                 continue
+            train_model_win.append(sim.loc[d, "p_win"])
+            train_grid_win.append(win_probs_grid[d])
+            train_true_win.append(1 if d == winner else 0)
             train_model_podium.append(sim.loc[d, "p_podium"])
             train_grid_podium.append(podium_probs_grid[d])
             train_true_podium.append(1 if d in podium_finishers else 0)
 
-    # Fit blend weight for podium
-    if len(train_model_podium) > 10:
-        w_podium = fit_blend_weight(
-            np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium)
+    # Fit calibration parameters on all training data
+    if len(train_model_win) > 10:
+        a_win, b_win = fit_calibration_params(
+            np.array(train_model_win), np.array(train_grid_win), np.array(train_true_win),
+            normalize_to=1.0
+        )
+        a_podium, b_podium = fit_calibration_params(
+            np.array(train_model_podium), np.array(train_grid_podium), np.array(train_true_podium),
+            normalize_to=3.0
         )
     else:
-        w_podium = 0.0
+        a_win, b_win = 1.0, 0.0
+        a_podium, b_podium = 1.0, 0.0
 
     return {
         "win_rates": win_rates.tolist(),
         "podium_rates": podium_rates.tolist(),
-        "w_podium": w_podium,
+        "a_win": a_win,
+        "b_win": b_win,
+        "a_podium": a_podium,
+        "b_podium": b_podium,
     }
