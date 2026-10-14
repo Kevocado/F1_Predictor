@@ -101,3 +101,63 @@ def test_compute_quali_features_missing_times():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def test_quali_history_no_leakage():
+    """Verify that a race's quali features don't change when its own qualifying is altered.
+
+    This ensures no lookahead leakage: features for round N only use sessions
+    strictly before round N.
+    """
+    import pandas as pd
+
+    # Create a small fake quali dataset with 2 rounds
+    rows = []
+    for rnd in [1, 2]:
+        # Team: ver (faster) and per (slower)
+        rows.append({
+            "season": 2023, "round": rnd, "driver_id": "ver", "constructor_id": "red_bull",
+            "quali_position": 1, "q1": "1:30.000", "q2": "1:29.500", "q3": "1:29.000"
+        })
+        rows.append({
+            "season": 2023, "round": rnd, "driver_id": "per", "constructor_id": "red_bull",
+            "quali_position": 2, "q1": "1:30.500", "q2": "1:30.000", "q3": "1:29.500"
+        })
+    quali_df = pd.DataFrame(rows)
+
+    # Compute features
+    result = compute_quali_features(quali_df)
+
+    # Round 1 should have NaN for rolling features (no prior data)
+    r1 = result[result["round"] == 1].set_index("driver_id")
+    assert r1["quali_avg_position_3"].isna().all()
+    assert r1["quali_avg_gap_to_pole_3"].isna().all()
+
+    # Round 2 should use only round 1 data
+    r2 = result[result["round"] == 2].set_index("driver_id")
+    # ver was P1 in round 1, so avg should be 1.0
+    assert r2.loc["ver", "quali_avg_position_3"] == 1.0
+    # per was P2 in round 1, so avg should be 2.0
+    assert r2.loc["per", "quali_avg_position_3"] == 2.0
+
+    # Now MODIFY round 2's qualifying results drastically
+    # ver: P10 instead of P1, per: P9 instead of P2
+    quali_df_modified = quali_df.copy()
+    quali_df_modified.loc[(quali_df_modified["round"] == 2) & (quali_df_modified["driver_id"] == "ver"), "quali_position"] = 10
+    quali_df_modified.loc[(quali_df_modified["round"] == 2) & (quali_df_modified["driver_id"] == "ver"), "q3"] = "1:35.000"
+    quali_df_modified.loc[(quali_df_modified["round"] == 2) & (quali_df_modified["driver_id"] == "per"), "quali_position"] = 9
+    quali_df_modified.loc[(quali_df_modified["round"] == 2) & (quali_df_modified["driver_id"] == "per"), "q3"] = "1:34.500"
+
+    # Recompute features on modified data
+    result_modified = compute_quali_features(quali_df_modified)
+
+    # Round 2's features should be IDENTICAL before and after modification
+    # because they only use round 1 data (strictly before round 2)
+    r2_orig = result[result["round"] == 2].set_index("driver_id")
+    r2_mod = result_modified[result_modified["round"] == 2].set_index("driver_id")
+
+    for driver in ["ver", "per"]:
+        for col in ["quali_avg_position_3", "quali_avg_gap_to_pole_3", "teammate_quali_gap"]:
+            orig_val = r2_orig.loc[driver, col]
+            mod_val = r2_mod.loc[driver, col]
+            assert orig_val == mod_val, f"Leakage detected: {driver} {col} changed from {orig_val} to {mod_val} when round 2 data was modified"
