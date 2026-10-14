@@ -125,8 +125,17 @@ def apply_calibration(
     grid_probs: dict[str, float],
     a: float,
     b: float,
+    normalize_to: float | None = None,
 ) -> dict[str, float]:
-    """Apply 2-parameter calibration to model probabilities."""
+    """Apply 2-parameter calibration to model probabilities.
+
+    Args:
+        model_probs: Model probabilities per driver
+        grid_probs: Grid lookup probabilities per driver
+        a, b: Calibration parameters
+        normalize_to: If set, renormalize so sum = normalize_to (e.g., 1.0 for win, 3.0 for podium).
+                      If None, no renormalization.
+    """
     eps = 1e-6
     drivers = list(model_probs.keys())
     model_arr = np.array([model_probs[d] for d in drivers])
@@ -145,8 +154,9 @@ def apply_calibration(
     p_cal = sigmoid(z)
     p_cal = np.clip(p_cal, eps, 1 - eps)
 
-    # Renormalize so probabilities sum to 1 across the field (for win market)
-    p_cal = p_cal / p_cal.sum()
+    # Renormalize if requested
+    if normalize_to is not None:
+        p_cal = p_cal / p_cal.sum() * normalize_to
 
     return {d: float(p_cal[i]) for i, d in enumerate(drivers)}
 
@@ -303,8 +313,8 @@ def evaluate_calibrated_candidate(
             model_podium = {d: sim.loc[d, "p_podium"] for d in race["driver_id"] if d in sim.index}
 
             # Apply calibration
-            cal_win = apply_calibration(model_win, win_probs_grid, a_win, b_win)
-            cal_podium = apply_calibration(model_podium, podium_probs_grid, a_podium, b_podium)
+            cal_win = apply_calibration(model_win, win_probs_grid, a_win, b_win, normalize_to=1.0)
+            cal_podium = apply_calibration(model_podium, podium_probs_grid, a_podium, b_podium, normalize_to=3.0)
 
             winners = race.loc[race["position"] == 1, "driver_id"]
             winner = winners.iloc[0] if not winners.empty else None

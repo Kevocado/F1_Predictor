@@ -286,11 +286,13 @@ def _predict_upcoming_race(
 
         cal_win = apply_calibration(
             model_win, win_probs_grid,
-            calibration_params["a_win"], calibration_params["b_win"]
+            calibration_params["a_win"], calibration_params["b_win"],
+            normalize_to=1.0  # win market sums to 1
         )
         cal_podium = apply_calibration(
             model_podium, podium_probs_grid,
-            calibration_params["a_podium"], calibration_params["b_podium"]
+            calibration_params["a_podium"], calibration_params["b_podium"],
+            normalize_to=3.0  # podium market sums to 3 (top 3 drivers)
         )
 
         # Update sim with calibrated probabilities
