@@ -8,9 +8,9 @@ import userEvent from "@testing-library/user-event";
 // src/test/no-real-time.test.ts keeps the whole suite on setup().
 const user = userEvent.setup();
 
-import App from "./App";
-
 afterEach(() => vi.restoreAllMocks());
+
+import App from "./App";
 
 function renderApp() {
   vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise(() => {}));
@@ -25,16 +25,17 @@ describe("App family frame", () => {
     const sports = screen.getByRole("navigation", { name: "Sports" });
     expect(within(sports).getByRole("link", { name: "F1" })).toHaveAttribute("aria-current", "page");
     expect(within(sports).getByRole("link", { name: "NBA" }).getAttribute("href")).toMatch(/^https:\/\/nba\./);
+    expect(within(sports).getByRole("link", { name: "Paper Trading" })).toBeInTheDocument();
   });
 
   it("switches pages with the page tabs and keeps every page mounted", async () => {
     renderApp();
-    const pages = screen.getByRole("navigation", { name: "Pages" });
-    expect(within(pages).getAllByRole("button").map((b) => b.textContent)).toEqual(["Races", "Championship", "Track record"]);
-    expect(within(pages).getByRole("button", { name: "Races" })).toHaveAttribute("aria-current", "page");
+    const pages = screen.getByRole("tablist", { name: "Pages" });
+    expect(within(pages).getAllByRole("tab").map((b) => b.textContent)).toEqual(["Races", "Championship", "Track record"]);
+    expect(within(pages).getByRole("tab", { name: "Races" })).toHaveAttribute("aria-selected", "true");
 
-    await user.click(within(pages).getByRole("button", { name: "Championship" }));
-    expect(within(pages).getByRole("button", { name: "Championship" })).toHaveAttribute("aria-current", "page");
+    await user.click(within(pages).getByRole("tab", { name: "Championship" }));
+    expect(within(pages).getByRole("tab", { name: "Championship" })).toHaveAttribute("aria-selected", "true");
     // Hidden, not unmounted: switching back never refetches.
     expect(screen.getByTestId("page-races")).not.toBeVisible();
     expect(screen.getByTestId("page-championship")).toBeVisible();
