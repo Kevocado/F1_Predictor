@@ -105,7 +105,7 @@ jobs:
 
       - name: Upload comparison
         if: steps.needed.outputs.go == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retrain-comparison
           path: |
