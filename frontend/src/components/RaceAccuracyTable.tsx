@@ -39,7 +39,6 @@ function VerdictChip({ right }: { right: boolean }) {
 }
 
 export function RaceAccuracyTable({ entries }: { entries: RaceAccuracyEntry[] }) {
-  if (entries.length === 0) return <p className="py-6 text-sm text-pr-text-dim">No resolved races yet.</p>;
   const [detail, setDetail] = useState<Record<string, RaceDetail | "loading">>({});
 
   const toggle = useCallback((e: RaceAccuracyEntry) => {
@@ -73,6 +72,7 @@ export function RaceAccuracyTable({ entries }: { entries: RaceAccuracyEntry[] })
       });
   }, [detail]);
 
+  if (entries.length === 0) return <p className="py-6 text-sm text-pr-text-dim">No resolved races yet.</p>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[40rem] border-collapse text-sm">
