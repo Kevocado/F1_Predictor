@@ -41,29 +41,26 @@ function mock(
 
 describe("TrackRecordPage", () => {
   it("counts every recorded pick in the ledger, and keeps the by-race table on its own rule", async () => {
-    // The old test was "counts only sessions snapshotted before they ran, and says
-    // how many were left out", and asserted the strings "Only predictions
-    // snapshotted before the session count" and "2 sessions were rebuilt after
-    // they ran and are left out." Both are gone: the ledger counts every
-    // recorded pick, and nothing is described as left out.
-    mock([entry(3, true, false), entry(2, false, true), entry(1, false, true)], 2);
+    // 3 snapshotted (counted) races plus 1 rebuilt session. The summary
+    // strip judges only the counted races; the rebuilt row carries its own
+    // "Made after the session" disclosure.
+    mock([entry(3, true, false), entry(2, true, false), entry(1, true, false), entry(4, false, true)], 2);
     render(<TrackRecordPage />);
 
-    // The by-race table keeps its strict rule, and says so in its own words.
     expect(await screen.findByText(/This table judges only sessions snapshotted before they ran/)).toBeInTheDocument();
     expect(screen.getByText(/2 sessions have at least one pick recorded at or after the start/)).toBeInTheDocument();
-    // The summary tiles judge the one pre-session session only.
-    expect(screen.getByTestId("winners-called")).toHaveTextContent("1/1");
+    // 3 counted races, all winners called.
+    expect(screen.getByTestId("winners-called")).toHaveTextContent("3/3");
     const rows = screen.getAllByTestId("race-row");
-    expect(within(rows[1]).getByText("Made after the session")).toBeInTheDocument();
-    expect(within(rows[1]).queryByText(/✗/)).not.toBeInTheDocument();
+    expect(within(rows[3]).getByText("Made after the session")).toBeInTheDocument();
+    // Wrong calls are words, never colour alone: no ✗ anywhere.
+    expect(screen.queryByText(/✗/)).not.toBeInTheDocument();
   });
 
   it("discloses how much of the headline was recorded after the session started", async () => {
     mock([entry(3, true, false)], 1);
     render(<TrackRecordPage />);
 
-    // The headline's own numbers, and the split between the two figures.
     expect(await screen.findByText(/Every recorded pick, whenever it was made/)).toBeInTheDocument();
     expect(screen.getByText(/Of these 8 picks, 4 were recorded at or after their session's start, and 4 before it/)).toBeInTheDocument();
     expect(screen.getByTestId("timing-note")).toHaveTextContent(
@@ -79,16 +76,12 @@ describe("TrackRecordPage", () => {
     render(<TrackRecordPage />);
 
     expect(await screen.findByText("Made before the session started")).toBeInTheDocument();
-    // The headline's win row is n=20 at Brier 0.041; the secondary is n=10 at
-    // 0.021. Two ledgers, so the n and the rate both have to differ visibly.
     expect(within(screen.getByTestId("ledger")).getByText("20")).toBeInTheDocument();
     expect(within(screen.getByTestId("pre-session-ledger")).getByText("10")).toBeInTheDocument();
     expect(within(screen.getByTestId("pre-session-ledger")).getByText("0.021")).toBeInTheDocument();
   });
 
   it("says the two figures are the same picks rather than printing the ledger twice", async () => {
-    // "One figure, one place": when nothing was recorded late, the pre-session
-    // subset IS the headline, so it is named and not reprinted.
     mock([entry(3, true, false)], 0, {
       pre_session: { n_resolved: 8, by_market: [] },
       n_pre_session: 8, n_post_session_picks: 0,
@@ -120,10 +113,74 @@ describe("TrackRecordPage", () => {
     expect(screen.queryByTestId("winners-called")).not.toBeInTheDocument();
   });
 
+  it("says too early to judge when fewer than 3 races are scored", async () => {
+    // 2 counted races: the summary strip is replaced by the honest early
+    // state rather than showing percentages as if they meant something.
+    mock([entry(3, true, false), entry(2, false, false)], 0);
+    render(<TrackRecordPage />);
+
+    expect(await screen.findByText(/Too early to judge: 2 races scored/)).toBeInTheDocument();
+    expect(screen.queryByTestId("winners-called")).not.toBeInTheDocument();
+  });
+
+  it("keeps jargon out of visible text: no Brier, hit rate, tier, ECE or CRPS", async () => {
+    mock([entry(3, true, false)], 0);
+    render(<TrackRecordPage />);
+
+    expect(screen.queryByText(/Brier/i)).toBeNull();
+    expect(screen.queryByText(/hit rate/i)).toBeNull();
+    expect(screen.queryByText(/ECE/i)).toBeNull();
+    expect(screen.queryByText(/CRPS/i)).toBeNull();
+    // Plain words stand in their place, each with an explainer.
+    expect((await screen.findAllByText(/Probability error/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Right calls/)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Confidence band/)).length).toBeGreaterThan(0);
+  });
+
   it("writes scores in plain numbers", async () => {
     mock([entry(3, true, false)]);
     render(<TrackRecordPage />);
     expect(await screen.findByText("0.041")).toBeInTheDocument();
+  });
+
+  it("expands a race to show the predicted top three with probabilities and Right/Wrong calls", async () => {
+    const race: RaceAccuracyEntry = {
+      season: 2026, round: 3, race_name: "GP 3", tier: "post_qualifying", rebuilt: false,
+      win_predicted: ["max_verstappen"], win_actual: ["max_verstappen"], win_hits: 1, win_of: 1,
+      podium_predicted: ["max_verstappen", "lando_norris", "charles_leclerc"],
+      podium_actual: ["max_verstappen", "lando_norris", "charles_leclerc"],
+      podium_hits: 3, podium_of: 3,
+      points_finish_predicted: [], points_finish_actual: [], points_finish_hits: 0, points_finish_of: 10,
+    };
+    mock([race], 0);
+    vi.spyOn(api, "racePrediction").mockResolvedValue({
+      season: 2026, round: 3, race_name: "GP 3", tier: "post_qualifying", source: "tracked",
+      predictions: [
+        { driver_id: "max_verstappen", constructor_id: "red_bull", p_win: 0.68, p_podium: 0.85, p_points_finish: 0.95, p_dnf: 0.03, expected_position: 1, expected_points: 25, actual_position: 1, actual_dnf: false },
+        { driver_id: "lando_norris", constructor_id: "mclaren", p_win: 0.18, p_podium: 0.7, p_points_finish: 0.9, p_dnf: 0.05, expected_position: 2, expected_points: 18, actual_position: 2, actual_dnf: false },
+        { driver_id: "oscar_piastri", constructor_id: "mclaren", p_win: 0.07, p_podium: 0.55, p_points_finish: 0.8, p_dnf: 0.06, expected_position: 3, expected_points: 15, actual_position: 4, actual_dnf: false },
+        { driver_id: "charles_leclerc", constructor_id: "ferrari", p_win: 0.04, p_podium: 0.4, p_points_finish: 0.7, p_dnf: 0.08, expected_position: 4, expected_points: 12, actual_position: 3, actual_dnf: false },
+      ],
+    } as unknown as Awaited<ReturnType<typeof api.racePrediction>>);
+    render(<TrackRecordPage />);
+
+    await user.click(await screen.findByRole("button", { name: "Show detail" }));
+
+    // Predicted top three in the detail, each with its probability and a worded call.
+    // Oscar Piastri is detail-only: he is not the predicted winner, so his name only
+    // appears once the row is expanded.
+    expect(await screen.findByText("Oscar Piastri")).toBeInTheDocument();
+    expect(screen.getByText("7.0%")).toBeInTheDocument();
+    expect(screen.getAllByText("Right")).toHaveLength(2);
+    expect(screen.getAllByText("Wrong")).toHaveLength(1);
+    // Verstappen (68%) and Norris (18%) are right; their chances are detail-only.
+    expect(screen.getByText("68%")).toBeInTheDocument();
+    expect(screen.getByText("18%")).toBeInTheDocument();
+    // The actual top three sit beside the predicted ones.
+    expect(await screen.findByText("Max Verstappen, Lando Norris, Charles Leclerc")).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "Hide detail" }));
+    expect(screen.queryByText("Oscar Piastri")).not.toBeInTheDocument();
   });
 
   it("recovers from a failed load with Try again", async () => {

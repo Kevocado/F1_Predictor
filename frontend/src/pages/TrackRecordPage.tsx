@@ -2,10 +2,21 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { RaceAccuracyEntry, TrackRecordResponse } from "../types";
 import { MARKET_LABELS, TIER_LABELS } from "../lib/glossary";
-import { ErrorState, Skeleton, StatTile, pct, pctFine, record } from "../predictor-ui";
+import { ErrorState, Skeleton, StatTile, pct, pctFine, record, ProbabilityBar } from "../predictor-ui";
 import { RaceAccuracyTable } from "../components/RaceAccuracyTable";
+import { InfoTooltip } from "../components/InfoTooltip";
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+
+/** Turns a stated chance into the plain-words band it lives in. */
+function confidenceBandWords(p: number): string {
+  if (p < 0.5) return "Under 50% chance";
+  if (p < 0.6) return "Picked at 50-60% chance";
+  if (p < 0.7) return "Picked at 60-70% chance";
+  if (p < 0.8) return "Picked at 70-80% chance";
+  if (p < 0.9) return "Picked at 80-90% chance";
+  return "Picked at 90%+ chance";
+}
 
 /** The per-market ledger, over whatever rows it is handed.
  *
@@ -20,9 +31,15 @@ function LedgerTable({ rows, testId }: { rows: TrackRecordResponse["by_market"];
           <tr className="border-b border-pr-rule text-left font-pr-display text-xs uppercase tracking-wide text-pr-text-dim">
             <th className="py-2 pr-3 font-semibold">Market</th>
             <th className="py-2 pr-3 text-right font-semibold">Predictions</th>
-            <th className="py-2 pr-3 text-right font-semibold">Brier</th>
-            <th className="py-2 pr-3 text-right font-semibold">Hit rate</th>
-            <th className="py-2 pr-3 text-right font-semibold">Avg. predicted</th>
+            <th className="py-2 pr-3 text-right font-semibold">
+              Probability error{" "}
+              <InfoTooltip text="Probability error (lower is better): the squared gap between the predicted chance and what actually happened; 0 is perfect." />
+            </th>
+            <th className="py-2 pr-3 text-right font-semibold">
+              Right calls{" "}
+              <InfoTooltip text="Right calls: the share of recorded picks that came true, out of every pick for this market." />
+            </th>
+            <th className="py-2 pr-3 text-right font-semibold">Confidence band</th>
           </tr>
         </thead>
         <tbody>
@@ -32,7 +49,16 @@ function LedgerTable({ rows, testId }: { rows: TrackRecordResponse["by_market"];
               <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{row.n.toLocaleString("en-US")}</td>
               <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{row.brier.toFixed(3)}</td>
               <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{pctFine(row.hit_rate)}</td>
-              <td className="py-2 pr-3 text-right tabular-nums text-pr-text-dim">{pctFine(row.avg_predicted_prob)}</td>
+              <td className="py-2 pr-3 text-pr-text">
+                <div className="text-sm text-pr-text">{confidenceBandWords(row.avg_predicted_prob)}</div>
+                <ProbabilityBar
+                  segments={[
+                    { label: "Right", prob: row.hit_rate },
+                    { label: "Wrong", prob: Math.max(0, 1 - row.hit_rate) },
+                  ]}
+                  minSegmentPx={6}
+                />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -104,20 +130,28 @@ export function TrackRecordPage() {
           {" "}Each race compares the post-qualifying prediction with what happened: the predicted winner, and how many of the predicted top 3 and top 10 landed there. The full record, including the sessions this table skips, is the calibration ledger below.
         </p>
 
-        {counted.length > 0 ? (
-          <div className="mb-4 grid grid-cols-3 gap-3">
-            <div data-testid="winners-called">
-              <StatTile label="Winners called" value={record(sum((r) => Math.min(r.win_hits, r.win_of)), sum((r) => r.win_of))} />
-            </div>
-            <StatTile label="Podium places called" value={podiumOf ? pct(sum((r) => r.podium_hits) / podiumOf) : "—"} />
-            <StatTile label="Points places called" value={pointsOf ? pct(sum((r) => r.points_finish_hits) / pointsOf) : "—"} />
-          </div>
-        ) : (
+        {counted.length === 0 ? (
           accuracy.length > 0 && (
             <p className="mb-4 rounded-pr border border-pr-rule bg-pr-panel-2 px-3 py-2 text-sm text-pr-text">
               No races have a prediction snapshotted before they ran yet. The record starts with the next race.
             </p>
           )
+        ) : counted.length < 3 ? (
+          <p className="mb-4 rounded-pr border border-pr-rule bg-pr-panel-2 px-3 py-2 text-sm text-pr-text">
+            Too early to judge: {counted.length} races scored
+          </p>
+        ) : (
+          <div className="mb-4 grid grid-cols-3 gap-3">
+            <div data-testid="winners-called">
+              <StatTile label="Winners called" value={record(sum((r) => Math.min(r.win_hits, r.win_of)), sum((r) => r.win_of))} />
+            </div>
+            <div>
+              <StatTile label="Podium places called" value={podiumOf ? pct(sum((r) => r.podium_hits) / podiumOf) : "—"} />
+            </div>
+            <div>
+              <StatTile label="Points places called" value={pointsOf ? pct(sum((r) => r.points_finish_hits) / pointsOf) : "—"} />
+            </div>
+          </div>
         )}
         <RaceAccuracyTable entries={accuracy} />
       </section>
@@ -152,8 +186,8 @@ export function TrackRecordPage() {
             The same ledger over the {preSession.toLocaleString("en-US")} picks whose own
             timestamps prove they were recorded before their session started. There are no betting
             odds to compare F1 predictions against, so each snapshot is checked against the
-            result: Brier score, lower is better and 0 is perfect, and the hit rate should track
-            the average predicted chance.
+            result: probability error, lower is better, and the right calls should track the
+            stated chance.
           </p>
           {preSession === 0
             ? "No pick has been recorded in time yet, so this figure is empty rather than zero. It fills in as sessions are snapshotted before they start."
