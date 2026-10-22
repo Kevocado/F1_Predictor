@@ -121,10 +121,21 @@ def _oof_races(train_df, feature_cols, n_folds: int = 5, seed: int = SEED):
 
 
 def _per_race_loss(frame, prob_col, actual_col, temperature, market):
-    """Mean per-row log loss for one race under the given temperature."""
-    probs = calibration.apply_temperature_to_race(
-        frame[prob_col].to_numpy(dtype=float), temperature, calibration.MARKET_SUMS[market]
-    )
+    """Per-row log loss for one race under the given temperature.
+
+    `temperature=None` means "use these probabilities as they are" — the RAW
+    model's numbers, which the simulator already normalised per race. That is
+    not the same as temperature 1.0: the per-race rescale (podium -> 3,
+    points -> 10) reallocates mass when the cap at 1 binds, so passing the
+    raw probabilities through the rescale would compare the corrected model
+    against a rescaled raw model rather than against the raw model.
+    """
+    if temperature is None:
+        probs = frame[prob_col].to_numpy(dtype=float)
+    else:
+        probs = calibration.apply_temperature_to_race(
+            frame[prob_col].to_numpy(dtype=float), temperature, calibration.MARKET_SUMS[market]
+        )
     y = frame[actual_col].to_numpy(dtype=float)
     p = np.clip(probs, 1e-12, 1 - 1e-12)
     return -(y * np.log(p) + (1 - y) * np.log(1 - p))
@@ -210,20 +221,29 @@ def run_holdout(train_seasons, val_season):
         )
 
         # 2. paired log-loss delta (corrected - raw), same resampled races
+        # Corrected model: use corrected probabilities AS-IS (temperature=None).
+        # Raw model: use RAW probabilities (stored in raw_* columns) AS-IS.
+        # Both use temperature=None because the probabilities are already in final form.
         def loss_corrected(df, m=market, pc=prob_col, ac=actual_col):
-            return _per_race_loss(df, pc, ac, temperatures[m], m)
+            return _per_race_loss(df, pc, ac, None, m)
 
         def loss_raw(df, m=market, pc=raw_col, ac=actual_col):
-            return _per_race_loss(df, pc, ac, 1.0, m)
+            return _per_race_loss(df, pc, ac, None, m)
 
         d_mean, d_lo, d_hi = bootstrap_paired_delta(
             corrected_races, loss_corrected, loss_raw, n_resamples=N_BOOT, seed=SEED
         )
 
-        # 3. per-grid-bucket paired log-loss delta
+        # 3. per-grid-bucket paired log-loss delta.
+        #    The loss must be computed over the drivers IN THAT GRID only. Every
+        #    race contains every grid position, so restricting the RACES to
+        #    those containing the grid and then scoring all their drivers
+        #    would give every bucket the same whole-race loss.
         grid_results = []
         for g in sorted(corrected["grid"].unique()):
-            grid_races = [r for r in corrected_races if (r["grid"] == g).any()]
+            grid_races = [
+                r[r["grid"] == g].copy() for r in corrected_races if (r["grid"] == g).any()
+            ]
             if not grid_races:
                 continue
             sub = corrected[corrected["grid"] == g]

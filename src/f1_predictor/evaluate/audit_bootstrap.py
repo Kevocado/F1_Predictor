@@ -37,8 +37,8 @@ def bootstrap_race(
     """95% percentile interval of `statistic` over race-level resamples.
 
     `races` is a sequence of per-race DataFrames. Each resample draws
-    `len(races)` races with replacement, concatenates their rows, and
-    evaluates `statistic` on the pooled frame.
+    `len(races)` races with replacement, computes the statistic on EACH
+    resampled race, and averages those per-race statistics.
 
     Returns (lower, upper) at the 2.5 and 97.5 percentiles.
     """
@@ -49,8 +49,9 @@ def bootstrap_race(
     values = np.empty(n_resamples, dtype=float)
     for i in range(n_resamples):
         idx = rng.integers(0, n_races, n_races)
-        pooled = pd.concat([races[j] for j in idx], ignore_index=True)
-        values[i] = statistic(pooled)
+        # Compute statistic per resampled race, then average
+        race_stats = [statistic(races[j]) for j in idx]
+        values[i] = float(np.mean(race_stats))
     return float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))
 
 
@@ -61,11 +62,11 @@ def bootstrap_paired_delta(
     n_resamples: int = 2000,
     seed: int = 1,
 ) -> tuple[float, float, float]:
-    """95% CI of the mean per-row difference (loss_a - loss_b).
+    """95% CI of the mean per-race difference (loss_a - loss_b).
 
     The SAME resampled races are used for both losses, so the comparison is
-    paired: a game where the corrected model did badly is compared against
-    the same game's raw-model loss, not a different set of games.
+    paired: a race where the corrected model did badly is compared against
+    the same race's raw-model loss, not a different set of races.
 
     Returns (mean_delta, lower, upper).
     """
@@ -76,10 +77,9 @@ def bootstrap_paired_delta(
     deltas = np.empty(n_resamples, dtype=float)
     for i in range(n_resamples):
         idx = rng.integers(0, n_races, n_races)
-        pooled = pd.concat([races[j] for j in idx], ignore_index=True)
-        a = np.asarray(loss_a(pooled), dtype=float)
-        b = np.asarray(loss_b(pooled), dtype=float)
-        deltas[i] = float(np.mean(a - b))
+        # Compute per-race mean difference for each resampled race, then average
+        race_deltas = [float(np.mean(loss_a(races[j]) - loss_b(races[j]))) for j in idx]
+        deltas[i] = float(np.mean(race_deltas))
     return (
         float(np.mean(deltas)),
         float(np.percentile(deltas, 2.5)),

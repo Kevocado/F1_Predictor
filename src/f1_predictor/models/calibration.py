@@ -142,9 +142,19 @@ def apply_temperatures(
     for market, column in _MARKET_COLUMNS.items():
         if column not in out.columns:
             continue
+        # The pre-recalibration value is ALWAYS recorded, so a served
+        # prediction carries both numbers even when nothing was recalibrated.
         raw_col = f"raw_{column}"
         out[raw_col] = out[column]
-        temperature = float(temperatures.get(market, 1.0))
+        # But ONLY markets with a temperature are rescaled. A market that is
+        # not approved for recalibration must come out of here with its
+        # probabilities unchanged: temperature 1.0 is not a no-op here,
+        # because the per-race rescale (podium -> 3, points -> 10) still
+        # reallocates mass when the cap at 1 binds. Leaving unapproved
+        # markets alone is the whole point of the approval gate.
+        if market not in temperatures:
+            continue
+        temperature = float(temperatures[market])
         race_sum = MARKET_SUMS[market]
         if grouped:
             out[column] = out.groupby(race_key, sort=False)[column].transform(
@@ -276,23 +286,17 @@ def fit_temperatures_out_of_sample(
     from . import race_outcome
 
     frame = train_df[train_df["tier"] == session_state.TIER_POST_QUALIFYING].reset_index(drop=True)
+    # First pass: the races and their ACTUAL outcomes. The probabilities are
+    # deliberately NOT computed here — the out-of-sample pass below fills
+    # them, and predicting twice would train and simulate the ranker for
+    # every race only to throw the first set of numbers away.
     races: list[pd.DataFrame] = []
     for season, round_, race in frame.groupby(["season", "round"], sort=True):
         race = race.copy()
-        ranker = race_outcome.train_ranker(frame, feature_cols)
-        theta = race_outcome.theta_from_xgb_scores(
-            race_outcome.xgb_scores_for_race(ranker, race, feature_cols)
-        )
-        sim = race_outcome.simulate_race(
-            theta, dnf_prob=None, n_trials=3000, seed=42
-        ).set_index("driver_id")
         winner_rows = race.loc[race["position"] == 1, "driver_id"]
         winner = winner_rows.iloc[0] if not winner_rows.empty else None
         podium = race.loc[race["position"] <= 3, "driver_id"].values
         points_finish = race.loc[race["position"] <= 10, "driver_id"].values
-        race["p_win"] = race["driver_id"].map(sim["p_win"])
-        race["p_podium"] = race["driver_id"].map(sim["p_podium"])
-        race["p_points_finish"] = race["driver_id"].map(sim["p_points_finish"])
         race["actual_win"] = (race["driver_id"] == winner).astype(float)
         race["actual_pod"] = race["driver_id"].isin(podium).astype(float)
         race["actual_pts"] = race["driver_id"].isin(points_finish).astype(float)

@@ -170,6 +170,39 @@ def test_no_probability_exceeds_one_after_rescaling():
     assert (out <= 1.0 + 1e-12).all()
 
 
+def test_apply_temperatures_leaves_unapproved_markets_unchanged():
+    """A market with no temperature must come out byte-identical.
+
+    Temperature 1.0 is NOT a no-op: the per-race rescale (podium -> 3,
+    points -> 10) reallocates mass whenever the cap at 1 binds, so a market
+    that is not approved for recalibration would still be changed. Only
+    markets with a temperature may be touched at all.
+    """
+    n = 20
+    frame = pd.DataFrame(
+        {
+            "round": [1] * n,
+            "p_win": list(np.linspace(0.08, 0.02, n)),
+            # deliberately awkward: these sum to well under 3 and the cap
+            # would bind if the market were rescaled
+            "p_podium": list(np.linspace(0.30, 0.05, n)),
+            "p_points_finish": list(np.linspace(0.60, 0.20, n)),
+        }
+    )
+    out = calibration.apply_temperatures(frame, {"win": 2.0})
+    assert out["p_podium"].tolist() == frame["p_podium"].tolist()
+    assert out["p_points_finish"].tolist() == frame["p_points_finish"].tolist()
+    # and the approved market IS changed
+    assert out["p_win"].tolist() != frame["p_win"].tolist()
+    # the pre-recalibration value is recorded for every market, approved or not
+    for raw_col, col in (
+        ("raw_p_win", "p_win"),
+        ("raw_p_podium", "p_podium"),
+        ("raw_p_points_finish", "p_points_finish"),
+    ):
+        assert out[raw_col].tolist() == frame[col].tolist()
+
+
 def test_apply_temperatures_stores_raw_probabilities():
     n = 20
     frame = pd.DataFrame(
