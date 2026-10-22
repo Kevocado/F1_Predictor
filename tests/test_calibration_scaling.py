@@ -7,16 +7,24 @@ interval to a point) cannot pass.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from f1_predictor.evaluate.audit_bootstrap import (
+# Research code lives in scripts/, not in the installed package: the serving
+# path does not import it. Put that directory on sys.path so the tests import
+# exactly the modules the ship test runs.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import calibration  # noqa: E402
+from audit_bootstrap import (  # noqa: E402
     bootstrap_paired_delta,
     bootstrap_race,
     reliability_slope,
 )
-from f1_predictor.models import calibration
 
 
 # --------------------------------------------------------------------------
@@ -256,7 +264,7 @@ def test_fit_temperature_is_one_for_calibrated_probabilities():
 
 
 # --------------------------------------------------------------------------
-# ship-test gate: only approved markets are served
+# ship-test gate: only approved markets are rescaled
 # --------------------------------------------------------------------------
 
 
@@ -281,9 +289,9 @@ def test_approved_temperatures_handles_a_manifest_with_no_calibration_block():
     assert calibration.approved_temperatures({}) == {}
 
 
-def test_serving_applies_identity_when_nothing_is_approved():
-    """The shipped state: no market passed the ship test, so a served
-    prediction is unchanged — but the raw probability is still recorded."""
+def test_apply_temperatures_is_identity_when_nothing_is_approved():
+    """The shipped state: no market passed the ship test, so the probabilities
+    are unchanged — but the raw probability is still recorded."""
     frame = pd.DataFrame(
         {
             "p_win": [0.5, 0.3, 0.2],
@@ -296,7 +304,7 @@ def test_serving_applies_identity_when_nothing_is_approved():
     assert out["raw_p_win"].tolist() == pytest.approx([0.5, 0.3, 0.2])
 
 
-def test_serving_applies_the_temperature_for_an_approved_market(monkeypatch):
+def test_apply_temperatures_applies_the_temperature_for_an_approved_market(monkeypatch):
     monkeypatch.setattr(calibration, "APPROVED_MARKETS", ("win",))
     frame = pd.DataFrame({"p_win": [0.5, 0.3, 0.2]})
     out = calibration.apply_temperatures(frame, {"win": 2.0})

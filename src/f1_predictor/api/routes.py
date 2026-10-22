@@ -28,7 +28,6 @@ from ..evaluate import backtest as backtest_lib
 from ..features import build as build_features
 from ..features import session_build
 from ..features import session_state
-from ..models import calibration
 from ..models import championship_projection
 from ..models import dnf as dnf_model
 from ..models import explain as explain_lib
@@ -270,15 +269,6 @@ def _predict_upcoming_race(
 
     dnf_prob = dnf_model.predict_dnf_prob(dnf_clf, future_df, build_features.FEATURE_COLUMNS)
     sim = race_outcome.simulate_race(theta, dnf_prob, n_trials=10000)
-
-    # Race-level temperature scaling, for the markets the ship test approved
-    # (see models/calibration.py::approved_temperatures). The raw, pre-
-    # recalibration probabilities are kept on the frame as raw_p_win /
-    # raw_p_podium / raw_p_points_finish, so a served prediction carries
-    # both numbers and can be rolled back to the raw ones.
-    sim = calibration.apply_temperatures(
-        sim, calibration.approved_temperatures(_require_manifest())
-    )
 
     constructor_lookup = future_df.set_index("driver_id")["constructor_id"]
     sim["constructor_id"] = sim["driver_id"].map(constructor_lookup)
@@ -645,19 +635,6 @@ def _race_prediction_bundle(
     return sim, tier, "live", coverage
 
 
-def _optional_float(value) -> float | None:
-    """A float, or None when it is absent or NaN. Used for the
-    pre-recalibration probabilities, which do not exist when no market is
-    approved for recalibration."""
-    if value is None:
-        return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if pd.isna(number) else number
-
-
 def _title_case(driver_id: str) -> str:
     """The display name for a bare driver id: a verbatim mirror of the F1
     site's own title-caser (frontend/src/lib/teamColors.ts:46, driverName),
@@ -751,12 +728,6 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
                 p_podium=float(r["p_podium"]),
                 p_points_finish=float(r["p_points_finish"]),
                 p_dnf=float(r["p_dnf"]),
-                # The pre-recalibration probabilities, when temperature
-                # scaling was applied (models/calibration.py). None when no
-                # market is approved for recalibration.
-                raw_p_win=_optional_float(r.get("raw_p_win")),
-                raw_p_podium=_optional_float(r.get("raw_p_podium")),
-                raw_p_points_finish=_optional_float(r.get("raw_p_points_finish")),
                 expected_position=float(r["expected_position"]) if pd.notna(r.get("expected_position")) else float("nan"),
                 expected_points=float(r["expected_points"]) if pd.notna(r.get("expected_points")) else float("nan"),
                 actual_position=None if pd.isna(r.get("actual_position")) else int(r.get("actual_position")),

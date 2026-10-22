@@ -17,7 +17,6 @@ from ..data import jolpica
 from ..evaluate import walk_forward
 from ..features import session_build, session_state
 from ..features.build import build_training_frame
-from . import calibration
 from . import dnf as dnf_model
 from . import race_outcome, session_outcome
 
@@ -128,14 +127,6 @@ def train_all(seasons: list[int] | None = None) -> dict:
             sdnf_clf.save_model(str(dnf_path))
         session_metrics[session_type] = {"n_training_rows": int(len(sdf))}
 
-    print("Fitting race-level temperature scaling (out-of-sample, race-level K-fold)...")
-    try:
-        temperatures = calibration.fit_temperatures_out_of_sample(post_quali, feature_cols)
-    except Exception as exc:  # noqa: BLE001 - calibration is an enhancement, never blocks training
-        print(f"  ! Temperature fitting failed ({exc}); serving without recalibration")
-        temperatures = {}
-    print(f"  fitted temperatures: {temperatures}")
-
     manifest = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "seasons": seasons,
@@ -160,13 +151,6 @@ def train_all(seasons: list[int] | None = None) -> dict:
             "xgb_ranker": xgb_metrics.to_dict(orient="records"),
         },
         "session_models": session_metrics,
-        # Fitted race-level temperatures, for auditability. What is SERVED is
-        # the intersection with calibration.APPROVED_MARKETS — see
-        # models/calibration.py::approved_temperatures.
-        "calibration": {
-            "temperatures": temperatures,
-            "approved_markets": list(calibration.APPROVED_MARKETS),
-        },
     }
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, default=str))
     print(f"Wrote {MANIFEST_PATH}")

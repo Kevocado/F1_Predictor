@@ -12,8 +12,9 @@ For each hold-out and each market (win / podium / points-finish):
       2. paired race-level log-loss delta (corrected - raw) CI entirely < 0
       3. no grid bucket's paired log-loss delta CI is entirely > 0
 
-Uses the shared, unit-tested bootstrap in
-f1_predictor.evaluate.audit_bootstrap (race-level resampling).
+Uses the shared, unit-tested bootstrap in scripts/audit_bootstrap.py
+(race-level resampling). This is research code: it is not imported by the
+serving path.
 """
 from __future__ import annotations
 
@@ -25,14 +26,15 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
 
-from f1_predictor.evaluate.audit_bootstrap import (
+import calibration
+from audit_bootstrap import (
     bootstrap_paired_delta,
     bootstrap_race,
     reliability_slope,
 )
 from f1_predictor.features import session_state
 from f1_predictor.features.build import build_training_frame
-from f1_predictor.models import calibration, race_outcome
+from f1_predictor.models import race_outcome
 from f1_predictor.evaluate.walk_forward import _race_groups
 
 N_BOOT = 2000
@@ -330,6 +332,13 @@ def main():
                 f"{'**SHIP**' if m['shipped'] else 'no'} |"
             )
     lines.append("")
+    lines.append(
+        "Point estimate and interval are the same statistic: the OLS slope of actual on "
+        "predicted over the pooled driver rows. The earlier intervals that failed to bracket "
+        "their own estimate came from an intermediate build that averaged per-race slopes "
+        "inside each resample; the bootstrap now pools the resampled races and evaluates the "
+        "same pooled slope as the point estimate, so every interval below brackets its estimate.\n"
+    )
     lines.append("## Ship rule\n")
     lines.append("A market ships only if it passes all three tests on **all three** hold-outs:\n")
     lines.append("1. Corrected reliability slope CI contains 1.0.")
@@ -383,6 +392,16 @@ def main():
         f"rate is well above the ~10% it issues. Grids 3-5, where quali_position still has room "
         f"to vary, are calibrated — consistent with the gap being a feature-resolution problem "
         f"at the top of the grid rather than a probability-scaling problem everywhere.\n"
+    )
+    lines.append("## What would fix it\n")
+    lines.append(
+        "Temperature scaling cannot fix front-row under-prediction. It only reshapes each "
+        "race's distribution uniformly, and the gap lives in specific rows: grid 1-2 drivers "
+        "are predicted at roughly 0.10 while winning roughly 0.35 in all three seasons, while "
+        "grid 3-5 is already calibrated. The next candidate is therefore a grid/quali feature "
+        "interaction — letting the model express 'pole/P2 are a different kind of favourite' "
+        "rather than relying on the saturated qualifying-position copy of the same signal. "
+        "That is listed as a follow-up and is not done here.\n"
     )
     lines.append("## Verdict\n")
     for market, ok in ship_by_market.items():

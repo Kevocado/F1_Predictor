@@ -282,8 +282,8 @@ def fit_temperatures_out_of_sample(
     applied to. Race-level folds keep a whole race out of training, because
     drivers in one race are not independent of each other.
     """
-    from ..features import session_state
-    from . import race_outcome
+    from f1_predictor.features import session_state
+    from f1_predictor.models import race_outcome
 
     frame = train_df[train_df["tier"] == session_state.TIER_POST_QUALIFYING].reset_index(drop=True)
     # First pass: the races and their ACTUAL outcomes. The probabilities are

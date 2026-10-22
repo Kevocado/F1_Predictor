@@ -16,6 +16,8 @@ Generated 2026-10-22. Race-level paired bootstrap, 2000 resamples, resampling wh
 | 2024 | 2021,2022,2023 | 2024 | podium | 1.50 | 2.199 [1.766,2.580] | 1.269 [0.970,1.550] | 0.3353 | 0.3129 | -0.0219 [-0.0358,-0.0040] | yes | yes | NO (6) | no |
 | 2024 | 2021,2022,2023 | 2024 | points | 1.30 | 2.019 [1.811,2.191] | 1.596 [1.442,1.730] | 0.5173 | 0.5299 | +0.0169 [-0.0422,+0.1270] | NO | NO | yes | no |
 
+Point estimate and interval are the same statistic: the OLS slope of actual on predicted over the pooled driver rows. The earlier intervals that failed to bracket their own estimate came from an intermediate build that averaged per-race slopes inside each resample; the bootstrap now pools the resampled races and evaluates the same pooled slope as the point estimate, so every interval below brackets its estimate.
+
 ## Ship rule
 
 A market ships only if it passes all three tests on **all three** hold-outs:
@@ -33,6 +35,10 @@ A market ships only if it passes all three tests on **all three** hold-outs:
 | 2024 | 48 | 0.109 | 0.375 | 72 | 0.071 | 0.069 |
 
 **The front row is under-predicted, and the model's grid feature is out-weighted for exactly those rows.** Across the three hold-outs, grid 1-2 drivers are predicted at 0.089/0.101/0.109 while actually winning 0.341/0.386/0.375 — a gap of roughly 25 percentage points, and the same shape in all three hold-outs. Grid 3-5 drivers, by contrast, are close to the mark (predicted 0.071 vs actual 0.069 in the 2024 hold-out), so the miscalibration is specific to the very front of the grid rather than a uniform flatness across the field. The cause is visible in the ranker's feature importances for the 2024 hold-out model: `grid` carries importance 0.0420 and ranks 7 of 23, while `quali_position` carries 0.1273 and ranks 1 — a 3.0x difference. The post-qualifying tier feeds BOTH `grid` and `quali_position` (the model's grid feature is the qualifying position when the official grid is not yet known), so the ranker is effectively seeing the same signal twice and spending most of its weight on the qualifying-position copy, which saturates for front-row starters: pole and P2 sit at quali_position 1 and 2, a tiny part of that feature's range, so the model can only express 'these two are the favourites' coarsely and the 46%-of-24-races pole-sitter win rate is well above the ~10% it issues. Grids 3-5, where quali_position still has room to vary, are calibrated — consistent with the gap being a feature-resolution problem at the top of the grid rather than a probability-scaling problem everywhere.
+
+## What would fix it
+
+Temperature scaling cannot fix front-row under-prediction. It only reshapes each race's distribution uniformly, and the gap lives in specific rows: grid 1-2 drivers are predicted at roughly 0.10 while winning roughly 0.35 in all three seasons, while grid 3-5 is already calibrated. The next candidate is therefore a grid/quali feature interaction — letting the model express 'pole/P2 are a different kind of favourite' rather than relying on the saturated qualifying-position copy of the same signal. That is listed as a follow-up and is not done here.
 
 ## Verdict
 
