@@ -70,6 +70,14 @@ class DriverPrediction(BaseModel):
     p_podium: float
     p_points_finish: float
     p_dnf: float
+    # The PRE-recalibration probabilities, kept beside the corrected ones.
+    # Race-level temperature scaling (models/calibration.py) sharpens the
+    # per-race distribution; these are the numbers the model produced before
+    # that, so a served prediction carries both and the change can be
+    # measured — or rolled back — against the raw model output.
+    raw_p_win: float | None = None
+    raw_p_podium: float | None = None
+    raw_p_points_finish: float | None = None
     # Optional because they are NaN in 287 of the 515 race rows of the
     # committed snapshot (measured: rounds 1-12 and 15 — the tracked-
     # completed path sets them to NaN when the stored prediction has no
