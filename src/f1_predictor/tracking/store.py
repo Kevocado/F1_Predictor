@@ -538,6 +538,49 @@ def get_session_track_record(session_type: str | None = None, tier: str | None =
     }
 
 
+
+def get_calibration(session_type: str | None = None, tier: str | None = None) -> dict:
+    """Per-market confidence buckets (50-60/60-70/70%+) over resolved picks."""
+    with _connect() as conn:
+        query = "SELECT market, predicted_prob, actual_outcome FROM session_predictions WHERE resolved = 1"
+        params: list = []
+        if session_type:
+            query += " AND session_type = ?"
+            params.append(session_type)
+        if tier:
+            query += " AND tier = ?"
+            params.append(tier)
+        rows = conn.execute(query, params).fetchall()
+
+    from collections import defaultdict
+    buckets_by_market: dict[str, dict[str, list[int]]] = defaultdict(
+        lambda: {"50-60%": [0, 0], "60-70%": [0, 0], "70%+": [0, 0]}
+    )
+    for market, prob, actual in rows:
+        conf = float(prob)
+        hit = int(actual) == 1
+        if conf < 0.5:
+            continue
+        if conf < 0.6:
+            b = "50-60%"
+        elif conf < 0.7:
+            b = "60-70%"
+        else:
+            b = "70%+"
+        buckets_by_market[market][b][0] += 1
+        if hit:
+            buckets_by_market[market][b][1] += 1
+
+    result = {}
+    for market, buckets in buckets_by_market.items():
+        result[market] = [
+            {"bucket": k, "n": v[0], "correct": v[1]}
+            for k, v in buckets.items()
+            if v[0] > 0
+        ]
+    return result
+
+
 def get_session_accuracy(session_type: str | None = None, tier: str | None = None) -> list[dict]:
     """Per-session accuracy: did the model's own top pick actually land
     there — mirrors the old get_race_accuracy, generalized across markets

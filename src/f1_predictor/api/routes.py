@@ -860,6 +860,7 @@ def get_track_record(tier: str | None = None, session_type: str | None = None) -
     return TrackRecordResponse(
         n_resolved=result["n_resolved"],
         by_market=entries(result["by_market"]),
+        calibration=store.get_calibration(session_type=session_type, tier=tier),
         pre_session=TrackRecordSubset(
             n_resolved=result["pre_session"]["n_resolved"],
             by_market=entries(result["pre_session"]["by_market"]),

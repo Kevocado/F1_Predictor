@@ -239,6 +239,7 @@ class TrackRecordResponse(BaseModel):
 
     n_resolved: int
     by_market: list[TrackRecordEntry]
+    calibration: dict | None = None
     # The pre-session subset beside the headline: what the model would have said
     # on the weekend. The figure to read for live performance.
     pre_session: TrackRecordSubset
