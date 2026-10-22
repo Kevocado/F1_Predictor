@@ -337,7 +337,9 @@ def main():
         "predicted over the pooled driver rows. The earlier intervals that failed to bracket "
         "their own estimate came from an intermediate build that averaged per-race slopes "
         "inside each resample; the bootstrap now pools the resampled races and evaluates the "
-        "same pooled slope as the point estimate, so every interval below brackets its estimate.\n"
+        "same pooled slope as the point estimate. Every interval in this run happens to "
+        "bracket its estimate; a percentile bootstrap does not guarantee that in degenerate "
+        "cases.\n"
     )
     lines.append("## Ship rule\n")
     lines.append("A market ships only if it passes all three tests on **all three** hold-outs:\n")
@@ -377,21 +379,20 @@ def main():
         f"contrast, are close to the mark (predicted "
         f"{g['grid_3_5']['pred']:.3f} vs actual {g['grid_3_5']['actual']:.3f} in the 2024 hold-out), "
         f"so the miscalibration is specific to the very front of the grid rather than a uniform "
-        f"flatness across the field. The cause is visible in the ranker's feature "
-        f"importances for the 2024 hold-out model: `grid` carries importance "
+        f"flatness across the field. The ranker's feature importances for the 2024 hold-out "
+        f"model point to a plausible explanation: `grid` carries importance "
         f"{imp.get('grid', float('nan')):.4f} and ranks {grid_rank[0] if grid_rank else 'n/a'} of "
         f"{len(imp)}, while `quali_position` carries {imp.get('quali_position', float('nan')):.4f} "
         f"and ranks {quali_rank[0] if quali_rank else 'n/a'} — a "
         f"{imp.get('quali_position', 0) / max(imp.get('grid', 1e-9), 1e-9):.1f}x difference. "
         f"The post-qualifying tier feeds BOTH `grid` and `quali_position` (the model's grid "
-        f"feature is the qualifying position when the official grid is not yet known), so the "
-        f"ranker is effectively seeing the same signal twice and spending most of its weight on "
-        f"the qualifying-position copy, which saturates for front-row starters: pole and P2 sit "
-        f"at quali_position 1 and 2, a tiny part of that feature's range, so the model can only "
-        f"express 'these two are the favourites' coarsely and the 46%-of-24-races pole-sitter win "
-        f"rate is well above the ~10% it issues. Grids 3-5, where quali_position still has room "
-        f"to vary, are calibrated — consistent with the gap being a feature-resolution problem "
-        f"at the top of the grid rather than a probability-scaling problem everywhere.\n"
+        f"feature is the qualifying position when the official grid is not yet known), which "
+        f"is consistent with the ranker seeing the same signal twice and spending most of its "
+        f"weight on the qualifying-position copy; that copy saturates for front-row starters, "
+        f"since pole and P2 sit at quali_position 1 and 2, a tiny part of the feature's range. "
+        f"Grids 3-5, where quali_position still has room to vary, are calibrated. This is "
+        f"consistent with a feature-resolution problem at the top of the grid rather than a "
+        f"probability-scaling problem everywhere, but this audit does not isolate the cause.\n"
     )
     lines.append("## What would fix it\n")
     lines.append(
