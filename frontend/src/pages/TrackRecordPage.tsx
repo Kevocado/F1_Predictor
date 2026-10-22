@@ -4,6 +4,7 @@ import type { RaceAccuracyEntry, TrackRecordResponse } from "../types";
 import { MARKET_LABELS, TIER_LABELS } from "../lib/glossary";
 import { ErrorState, Skeleton, StatTile, pct, pctFine, record, ProbabilityBar } from "../predictor-ui";
 import { RaceAccuracyTable } from "../components/RaceAccuracyTable";
+import { CalibrationBlock } from "../predictor-ui";
 import { InfoTooltip } from "../components/InfoTooltip";
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
@@ -171,6 +172,21 @@ export function TrackRecordPage() {
             : `A pick recorded after the session started still counts, and is never presented as one made before it: every row the API sends carries both timestamps and the derived label. Read the pre-session table below for what the model would have said on the weekend.`}
         </p>
         {data.n_resolved === 0 && <p className="py-4 text-sm text-pr-text-dim">No resolved predictions yet. They appear as sessions are run.</p>}
+        {data && data.calibration && Object.keys(data.calibration).length > 0 && (
+          <CalibrationBlock
+            series={Object.entries(data.calibration).map(([market, buckets]) => ({
+              key: market,
+              label: MARKET_LABELS[market] ?? market,
+              buckets: (buckets ?? []).filter((b) => b.n > 0).map((b) => ({ bucket: b.bucket, n: b.n, correct: b.correct })),
+            }))}
+            markets={data.by_market.map((row) => ({
+              key: row.market,
+              label: MARKET_LABELS[row.market] ?? row.market,
+              counted: { correct: Math.round(row.hit_rate * row.n), n: row.n },
+            }))}
+          />
+        )}
+
         {Object.entries(grouped).map(([tier, rows]) => (
           <div key={tier} className="mb-5 last:mb-0">
             <h3 className="mb-2 font-pr-display text-sm font-semibold uppercase tracking-wide text-pr-text-dim">{TIER_LABELS[tier] ?? tier}</h3>

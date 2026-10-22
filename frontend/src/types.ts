@@ -161,6 +161,8 @@ export interface TrackRecordResponse {
    */
   n_resolved: number;
   by_market: TrackRecordEntry[];
+  /** Per-market confidence buckets from get_calibration(). */
+  calibration?: Record<string, { bucket: string; n: number; correct: number }[]>;
   /**
    * The pre-session subset beside the headline: what the model would have
    * said on the weekend. The figure to read for live performance.
