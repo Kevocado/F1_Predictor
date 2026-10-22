@@ -37,8 +37,12 @@ def bootstrap_race(
     """95% percentile interval of `statistic` over race-level resamples.
 
     `races` is a sequence of per-race DataFrames. Each resample draws
-    `len(races)` races with replacement, computes the statistic on EACH
-    resampled race, and averages those per-race statistics.
+    `len(races)` races with replacement, CONCATENATES their rows into a
+    single pooled DataFrame, and evaluates `statistic` on that pooled frame.
+
+    This is the correct way to bootstrap a statistic like the OLS slope
+    that is a property of the pooled data, not an average of per-race
+    statistics.
 
     Returns (lower, upper) at the 2.5 and 97.5 percentiles.
     """
@@ -49,9 +53,8 @@ def bootstrap_race(
     values = np.empty(n_resamples, dtype=float)
     for i in range(n_resamples):
         idx = rng.integers(0, n_races, n_races)
-        # Compute statistic per resampled race, then average
-        race_stats = [statistic(races[j]) for j in idx]
-        values[i] = float(np.mean(race_stats))
+        pooled = pd.concat([races[j] for j in idx], ignore_index=True)
+        values[i] = statistic(pooled)
     return float(np.percentile(values, 2.5)), float(np.percentile(values, 97.5))
 
 
