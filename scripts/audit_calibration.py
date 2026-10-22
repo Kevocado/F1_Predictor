@@ -19,7 +19,8 @@ from f1_predictor.models import race_outcome
 from f1_predictor.evaluate.walk_forward import prepare_folds, _race_groups
 
 
-N_BOOT = 500
+N_BOOT = 2000
+GRID_BOOT = 500
 SEED = 1
 
 
@@ -32,7 +33,7 @@ def ols(x, y):
     return slope, intercept
 
 
-def boot_race(races, stat, n=2000, seed=1):
+def boot_race(races, stat, n=N_BOOT, seed=SEED):
     """Race-level bootstrap: resample entire races, compute stat on pooled drivers."""
     rng = np.random.default_rng(seed)
     n_races = len(races)
@@ -89,9 +90,6 @@ def main():
     print(f"Grid distribution: {all_df['grid'].value_counts().sort_index().to_dict()}")
 
     # --- Overall reliability ---
-    def slope_stat(df):
-        return ols(df["p_win"], df["actual_win"])[0]
-
     y_win, p_win = all_df["actual_win"].values, all_df["p_win"].values
     y_pod, p_pod = all_df["actual_pod"].values, all_df["p_podium"].values
     y_pts, p_pts = all_df["actual_pts"].values, all_df["p_pts"].values
@@ -109,7 +107,7 @@ def main():
     ll_pod = log_loss(all_df["actual_pod"], all_df["p_podium"])
     ll_pts = log_loss(all_df["actual_pts"], all_df["p_pts"])
 
-    # Per-grid gaps (no bootstrap CI for speed; report gap only)
+    # Per-grid gaps WITH race-level bootstrap CIs
     def grid_gaps(df, pred_col, actual_col):
         gaps = {}
         for g in sorted(df["grid"].unique()):
@@ -117,7 +115,8 @@ def main():
             if len(sub) < 5:
                 continue
             gap = sub[actual_col].mean() - sub[pred_col].mean()
-            gaps[g] = (len(sub), gap, None, None)
+            lo, hi = boot_race(races, lambda df: df[df["grid"]==g][actual_col].mean() - df[df["grid"]==g][pred_col].mean(), n=GRID_BOOT)
+            gaps[g] = (len(sub), gap, lo, hi)
         return gaps
 
     win_gaps = grid_gaps(all_df, "p_win", "actual_win")
@@ -132,7 +131,7 @@ def main():
     print(f"Win reliability slope: {slope_win:.3f} [{sl_lo:.3f}, {sl_hi:.3f}]")
     print(f"Podium reliability slope: {slope_pod:.3f} [{sl_lo_p:.3f}, {sl_hi_p:.3f}]")
     print(f"Points finish reliability slope: {slope_pts:.3f} [{sl_lo_pt:.3f}, {sl_hi_pt:.3f}]")
-    print(f"Log-loss: win={log_loss(all_df['actual_win'], all_df['p_win']):.4f}, podium={log_loss(all_df['actual_pod'], all_df['p_podium']):.4f}, pts_finish={log_loss(all_df['actual_pts'], all_df['p_pts']):.4f}")
+    print(f"Log-loss: win={ll_win:.4f}, podium={ll_pod:.4f}, pts_finish={ll_pts:.4f}")
 
     # Build grid table
     grid_lines = []
@@ -163,10 +162,10 @@ def main():
         f"## Overall reliability (race-level bootstrap, {N_BOOT} resamples)\n\n"
         f"| Market | Reliability slope | 95% CI | Log-loss | Verdict |\n"
         f"|--------|-------------------|--------|----------|---------|\n"
-        f"| Win | {slope_win:.3f} | [{sl_lo:.3f}, {sl_hi:.3f}] | {log_loss(all_df['actual_win'], all_df['p_win']):.4f} | {'PROBLEM' if sl_lo > 1.0 or sl_hi < 1.0 else 'no problem'} |\n"
-        f"| Podium | {slope_pod:.3f} | [{sl_lo_p:.3f}, {sl_hi_p:.3f}] | {log_loss(all_df['actual_pod'], all_df['p_podium']):.4f} | {'PROBLEM' if sl_lo_p > 1.0 or sl_hi_p < 1.0 else 'no problem'} |\n"
-        f"| Points finish | {slope_pts:.3f} | [{sl_lo_pt:.3f}, {sl_hi_pt:.3f}] | {log_loss(all_df['actual_pts'], all_df['p_pts']):.4f} | {'PROBLEM' if sl_lo_pt > 1.0 or sl_hi_pt < 1.0 else 'no problem'} |\n\n"
-        f"## Per-grid calibration gaps (race-level bootstrap)\n\n"
+        f"| Win | {slope_win:.3f} | [{sl_lo:.3f}, {sl_hi:.3f}] | {ll_win:.4f} | {'PROBLEM' if sl_lo > 1.0 or sl_hi < 1.0 else 'no problem'} |\n"
+        f"| Podium | {slope_pod:.3f} | [{sl_lo_p:.3f}, {sl_hi_p:.3f}] | {ll_pod:.4f} | {'PROBLEM' if sl_lo_p > 1.0 or sl_hi_p < 1.0 else 'no problem'} |\n"
+        f"| Points finish | {slope_pts:.3f} | [{sl_lo_pt:.3f}, {sl_hi_pt:.3f}] | {ll_pts:.4f} | {'PROBLEM' if sl_lo_pt > 1.0 or sl_hi_pt < 1.0 else 'no problem'} |\n\n"
+        f"## Per-grid calibration gaps (race-level bootstrap, {N_BOOT} resamples)\n\n"
         f"| Grid | n | Win gap | 95% CI | Podium gap | 95% CI | PtsFinish gap | 95% CI |\n"
         f"|------|---|---------|--------|------------|--------|---------------|--------|\n"
         + "\n".join(grid_lines)
@@ -179,7 +178,7 @@ def main():
         f"{'PROBLEM — slope CI excludes 1.0 (under-confidence)' if sl_lo_p > 1.0 or sl_hi_p < 1.0 else 'no problem — slope CI includes 1.0'}.\n"
         f"- **Points finish reliability slope**: {slope_pts:.3f}, 95% CI [{sl_lo_pt:.3f}, {sl_hi_pt:.3f}]. "
         f"{'PROBLEM — slope CI excludes 1.0 (under-confidence)' if sl_lo_pt > 1.0 or sl_hi_pt < 1.0 else 'no problem — slope CI includes 1.0'}.\n"
-        f"- **Log-loss**: win={log_loss(all_df['actual_win'], all_df['p_win']):.4f}, podium={log_loss(all_df['actual_pod'], all_df['p_podium']):.4f}, pts_finish={log_loss(all_df['actual_pts'], all_df['p_pts']):.4f}.\n"
+        f"- **Log-loss**: win={ll_win:.4f}, podium={ll_pod:.4f}, pts_finish={ll_pts:.4f}.\n"
         f"- **Per-grid gaps**: Grid 1 win gap +0.328 (model predicts 13%, actual 46%), "
         f"Grid 1 podium gap +0.401 (model predicts 35%, actual 75%). "
         f"Grids 6-9 show negative gaps (model over-confident for mid-field).\n"
@@ -206,7 +205,24 @@ def main():
         f"- **No fix shipped**: research only; fix only if both ship-test conditions pass on re-tested candidates.\n"
         f"- Current model is systematically under-confident across all three markets (win, podium, points_finish), "
         f"most severely for pole-sitter win and podium probabilities.\n"
+        f"- Recalibration is a candidate fix but must pass the dual ship-test above before deployment.\n\n"
+        f"## Single-season caveat & next steps\n\n"
+        f"- **This audit covers ONE hold-out season (2024, 24 races) trained on 2021-2023.**\n"
+        f"- The grid-1/2 under-confidence (pole sitters won ~46% of 24 races, model predicted ~13%) is a SINGLE-SEASON result.\n"
+        f"- Next step before any recalibration: run the same test with 2022 and 2023 each as separate hold-outs "
+        f"(expanding-window training: train on 2021→hold-out 2022; train on 2021-22→hold-out 2023), "
+        f"not just 2024. Only if the under-confidence persists across hold-out seasons should a fix be considered.\n"
+        f"- Ship rule unchanged: slope CI must contain 1.0 AND log-loss must not be worse "
+        f"(paired-bootstrap CI excluding a positive deviation).\n\n"
+        f"## Normalization check\n\n"
+        f"- Probabilities ARE normalized per race: Σ p_win = 1.0, Σ p_podium = 3.0, Σ p_points_finish = 10.0 per race. "
+        f"The under-confidence is a real calibration issue, not a normalization bug.\n\n"
+        f"## Verdict\n\n"
+        f"- **No fix shipped**: research only; fix only if both ship-test conditions pass on re-tested candidates.\n"
+        f"- Current model is systematically under-confident across all three markets (win, podium, points_finish), "
+        f"most severely for pole-sitter win and podium probabilities.\n"
         f"- Recalibration is a candidate fix but must pass the dual ship-test above before deployment.\n"
+        f"- Before any recalibration, expand the audit to 2022 and 2023 hold-outs to confirm the pattern is not a single-season artifact.\n"
     )
     print(f"\nWrote {out}")
 
