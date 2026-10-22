@@ -1,7 +1,7 @@
 import { useState, useCallback, Fragment } from "react";
 import type { RaceAccuracyEntry } from "../types";
 import { driverName } from "../lib/teamColors";
-import { StatusBadge, ProbabilityBar, pctFine } from "../predictor-ui";
+import { StatusBadge, pctFine } from "../predictor-ui";
 import { api } from "../api/client";
 
 const names = (ids: string[]) => ids.map(driverName).join(", ") || "—";
