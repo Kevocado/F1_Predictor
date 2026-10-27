@@ -1,7 +1,7 @@
 export const TIER_LABELS: Record<string, string> = {
-  pre_weekend: "Pre-weekend",
-  post_practice: "Post-practice",
-  post_qualifying: "Post-qualifying",
+  pre_weekend: "Pre-weekend model",
+  post_practice: "After practice",
+  post_qualifying: "After qualifying",
   post_sprint_qualifying: "Post Sprint Quali",
   post_sprint: "Post Sprint",
 };
