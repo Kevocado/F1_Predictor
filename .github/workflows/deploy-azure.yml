@@ -21,9 +21,9 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
       - name: Build and push image
         run: |
-          docker build -t ghcr.io/kevocado/f1-predictor:${{ github.sha }} -t ghcr.io/kevocado/f1-predictor:latest .
-          docker push ghcr.io/kevocado/f1-predictor:${{ github.sha }}
-          docker push ghcr.io/kevocado/f1-predictor:latest
+          docker build -t ghcr.io/kevinsigey/f1-predictor:${{ github.sha }} -t ghcr.io/kevinsigey/f1-predictor:latest .
+          docker push ghcr.io/kevinsigey/f1-predictor:${{ github.sha }}
+          docker push ghcr.io/kevinsigey/f1-predictor:latest
       - name: Log in to Azure
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
         with:
@@ -32,4 +32,4 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - name: Deploy new image
         run: |
-          az containerapp update --name f1-predictor --resource-group predictor-hub-rg --image ghcr.io/kevocado/f1-predictor:${{ github.sha }}
+          az containerapp update --name f1-predictor --resource-group predictor-hub-rg --image ghcr.io/kevinsigey/f1-predictor:${{ github.sha }}
