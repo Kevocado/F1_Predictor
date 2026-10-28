@@ -51,7 +51,7 @@ jobs:
       - run: pip install -e .
 
       - name: Restore data cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/cache
           key: data-cache-${{ github.run_id }}
@@ -114,7 +114,7 @@ jobs:
 
       - name: Save data cache
         if: steps.needed.outputs.go == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/cache
           key: data-cache-${{ github.run_id }}

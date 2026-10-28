@@ -73,7 +73,7 @@ jobs:
       # restore + conditional save (instead of actions/cache) so a no-op
       # weekend tick does not write a new cache entry every 20 minutes.
       - name: Restore data cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: data/cache
           key: data-cache-${{ github.run_id }}
@@ -102,7 +102,7 @@ jobs:
 
       - name: Save data cache
         if: steps.gate.outputs.refresh == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: data/cache
           key: data-cache-${{ github.run_id }}
