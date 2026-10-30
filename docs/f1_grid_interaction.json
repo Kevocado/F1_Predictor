@@ -1,0 +1,1507 @@
+{
+  "meta": {
+    "generated": "2026-10-30",
+    "baseline_pr": "PR #84 (f1-1-tier-metrics), scripts/tier_metrics.py",
+    "incumbent": "xgb_ranker on FEATURE_COLUMNS, post_qualifying rows, trained on training seasons only",
+    "candidate": "incumbent + grid_interaction.GRID_FEATURES",
+    "holdouts": [
+      {
+        "val_season": 2022,
+        "train_seasons": [
+          2021
+        ],
+        "n_races": 22
+      },
+      {
+        "val_season": 2023,
+        "train_seasons": [
+          2021,
+          2022
+        ],
+        "n_races": 22
+      },
+      {
+        "val_season": 2024,
+        "train_seasons": [
+          2021,
+          2022,
+          2023
+        ],
+        "n_races": 24
+      }
+    ],
+    "n_races_pooled": 68,
+    "n_trials": 3000,
+    "sim_seed": 42,
+    "bootstrap": "paired race-level percentile, 10000 resamples, seed 1",
+    "grid_k_candidates": [
+      1,
+      2,
+      5,
+      10,
+      20,
+      50,
+      100,
+      200,
+      500,
+      1000
+    ],
+    "flag_default": false
+  },
+  "comparisons": {
+    "win_logloss_multiclass": {
+      "incumbent_mean": 2.3544,
+      "candidate_mean": 2.1936,
+      "delta_mean": -0.1608,
+      "delta_ci95": [
+        -0.212,
+        -0.1087
+      ]
+    },
+    "win_logloss_binary_per_driver": {
+      "incumbent_mean": 0.164,
+      "candidate_mean": 0.155,
+      "delta_mean": -0.009,
+      "delta_ci95": [
+        -0.0119,
+        -0.0061
+      ]
+    },
+    "spearman_rank_corr": {
+      "incumbent_mean": 0.6048,
+      "candidate_mean": 0.6205,
+      "delta_mean": 0.0157,
+      "delta_ci95": [
+        -0.0031,
+        0.0355
+      ]
+    },
+    "brier_podium": {
+      "incumbent_mean": 0.1049,
+      "candidate_mean": 0.0979,
+      "delta_mean": -0.007,
+      "delta_ci95": [
+        -0.0086,
+        -0.0054
+      ]
+    },
+    "brier_top6": {
+      "incumbent_mean": 0.1508,
+      "candidate_mean": 0.144,
+      "delta_mean": -0.0069,
+      "delta_ci95": [
+        -0.0089,
+        -0.0048
+      ]
+    },
+    "brier_top10": {
+      "incumbent_mean": 0.1827,
+      "candidate_mean": 0.1809,
+      "delta_mean": -0.0018,
+      "delta_ci95": [
+        -0.0039,
+        0.0003
+      ]
+    }
+  },
+  "verdict": {
+    "win_logloss_multiclass_improves_ci_excludes_zero": true,
+    "brier_podium_not_worse": true,
+    "brier_top6_not_worse": true,
+    "brier_top10_not_worse": true,
+    "spearman_not_worse": true,
+    "PASS": true
+  },
+  "front_row_diagnostic": {
+    "incumbent": {
+      "grid_1": {
+        "mean_p_win": 0.1174,
+        "actual_win_rate": 0.5147,
+        "n": 68
+      },
+      "grid_2": {
+        "mean_p_win": 0.0818,
+        "actual_win_rate": 0.2206,
+        "n": 68
+      }
+    },
+    "candidate": {
+      "grid_1": {
+        "mean_p_win": 0.1472,
+        "actual_win_rate": 0.5147,
+        "n": 68
+      },
+      "grid_2": {
+        "mean_p_win": 0.0938,
+        "actual_win_rate": 0.2206,
+        "n": 68
+      }
+    }
+  },
+  "per_race": {
+    "incumbent": [
+      {
+        "season": 2022,
+        "round": 1,
+        "win_logloss_multiclass": 2.480914628518463,
+        "win_logloss_binary_per_driver": 0.17136748229226823,
+        "spearman_rank_corr": 0.29473684210526313,
+        "brier_podium": 0.10714847777777778,
+        "brier_top6": 0.17759487777777777,
+        "brier_top10": 0.23525804444444445
+      },
+      {
+        "season": 2022,
+        "round": 2,
+        "win_logloss_multiclass": 3.421400088979675,
+        "win_logloss_binary_per_driver": 0.221090243692248,
+        "spearman_rank_corr": 0.18796992481203004,
+        "brier_podium": 0.1346539111111111,
+        "brier_top6": 0.17764745555555556,
+        "brier_top10": 0.23132855555555548
+      },
+      {
+        "season": 2022,
+        "round": 3,
+        "win_logloss_multiclass": 1.6347557204183902,
+        "win_logloss_binary_per_driver": 0.12326140262437597,
+        "spearman_rank_corr": 0.47368421052631576,
+        "brier_podium": 0.08398788888888889,
+        "brier_top6": 0.15475215555555558,
+        "brier_top10": 0.19156065555555557
+      },
+      {
+        "season": 2022,
+        "round": 4,
+        "win_logloss_multiclass": 2.50510935710552,
+        "win_logloss_binary_per_driver": 0.17275896160882792,
+        "spearman_rank_corr": 0.312781954887218,
+        "brier_podium": 0.09726290000000001,
+        "brier_top6": 0.15603906666666667,
+        "brier_top10": 0.24041291111111113
+      },
+      {
+        "season": 2022,
+        "round": 5,
+        "win_logloss_multiclass": 1.7391670191088844,
+        "win_logloss_binary_per_driver": 0.12984529068733483,
+        "spearman_rank_corr": 0.8661654135338346,
+        "brier_podium": 0.06513476666666666,
+        "brier_top6": 0.10621968888888886,
+        "brier_top10": 0.1574834
+      },
+      {
+        "season": 2022,
+        "round": 6,
+        "win_logloss_multiclass": 3.116018439428493,
+        "win_logloss_binary_per_driver": 0.2051046843872078,
+        "spearman_rank_corr": 0.556390977443609,
+        "brier_podium": 0.11518349999999997,
+        "brier_top6": 0.17322065555555557,
+        "brier_top10": 0.21322524444444452
+      },
+      {
+        "season": 2022,
+        "round": 7,
+        "win_logloss_multiclass": 2.551046452292545,
+        "win_logloss_binary_per_driver": 0.1750692466655357,
+        "spearman_rank_corr": 0.7578947368421052,
+        "brier_podium": 0.10458582222222224,
+        "brier_top6": 0.15440014444444444,
+        "brier_top10": 0.16200064444444445
+      },
+      {
+        "season": 2022,
+        "round": 8,
+        "win_logloss_multiclass": 3.5290307531720404,
+        "win_logloss_binary_per_driver": 0.22641413585444292,
+        "spearman_rank_corr": 0.003007518796992481,
+        "brier_podium": 0.14057753333333334,
+        "brier_top6": 0.20608174444444444,
+        "brier_top10": 0.22138302222222223
+      },
+      {
+        "season": 2022,
+        "round": 9,
+        "win_logloss_multiclass": 1.300728472790244,
+        "win_logloss_binary_per_driver": 0.10247222944418044,
+        "spearman_rank_corr": 0.6676691729323309,
+        "brier_podium": 0.06663913333333334,
+        "brier_top6": 0.13390228888888892,
+        "brier_top10": 0.17196813333333336
+      },
+      {
+        "season": 2022,
+        "round": 10,
+        "win_logloss_multiclass": 2.501036031717884,
+        "win_logloss_binary_per_driver": 0.17264966537563672,
+        "spearman_rank_corr": 0.2796992481203007,
+        "brier_podium": 0.10587824444444446,
+        "brier_top6": 0.15126657777777777,
+        "brier_top10": 0.24690945555555555
+      },
+      {
+        "season": 2022,
+        "round": 11,
+        "win_logloss_multiclass": 2.396895772465287,
+        "win_logloss_binary_per_driver": 0.16710360839303,
+        "spearman_rank_corr": 0.4451127819548871,
+        "brier_podium": 0.10947755555555554,
+        "brier_top6": 0.1586927777777778,
+        "brier_top10": 0.20773841111111108
+      },
+      {
+        "season": 2022,
+        "round": 12,
+        "win_logloss_multiclass": 2.864704011147587,
+        "win_logloss_binary_per_driver": 0.19191754193088953,
+        "spearman_rank_corr": 0.724812030075188,
+        "brier_podium": 0.1206876888888889,
+        "brier_top6": 0.17233266666666666,
+        "brier_top10": 0.18381109999999998
+      },
+      {
+        "season": 2022,
+        "round": 13,
+        "win_logloss_multiclass": 3.1780538303479458,
+        "win_logloss_binary_per_driver": 0.20848987704032385,
+        "spearman_rank_corr": 0.6165413533834586,
+        "brier_podium": 0.12203966666666663,
+        "brier_top6": 0.18941191111111114,
+        "brier_top10": 0.18347088888888888
+      },
+      {
+        "season": 2022,
+        "round": 14,
+        "win_logloss_multiclass": 2.8023608805734512,
+        "win_logloss_binary_per_driver": 0.18849811279864537,
+        "spearman_rank_corr": 0.4661654135338345,
+        "brier_podium": 0.12433295555555557,
+        "brier_top6": 0.176691,
+        "brier_top10": 0.20340511111111112
+      },
+      {
+        "season": 2022,
+        "round": 15,
+        "win_logloss_multiclass": 2.7181005369557116,
+        "win_logloss_binary_per_driver": 0.1844104517440762,
+        "spearman_rank_corr": 0.7112781954887217,
+        "brier_podium": 0.10379858888888889,
+        "brier_top6": 0.12192544444444442,
+        "brier_top10": 0.13457123333333335
+      },
+      {
+        "season": 2022,
+        "round": 16,
+        "win_logloss_multiclass": 3.1941832122778293,
+        "win_logloss_binary_per_driver": 0.209219874085642,
+        "spearman_rank_corr": 0.13082706766917293,
+        "brier_podium": 0.13590634444444444,
+        "brier_top6": 0.20042214444444442,
+        "brier_top10": 0.24278890000000003
+      },
+      {
+        "season": 2022,
+        "round": 17,
+        "win_logloss_multiclass": 1.851509473633829,
+        "win_logloss_binary_per_driver": 0.13712428249470793,
+        "spearman_rank_corr": 0.7984962406015037,
+        "brier_podium": 0.08240402222222223,
+        "brier_top6": 0.16315025555555557,
+        "brier_top10": 0.12558474444444442
+      },
+      {
+        "season": 2022,
+        "round": 18,
+        "win_logloss_multiclass": 1.286147412514952,
+        "win_logloss_binary_per_driver": 0.10184928940895141,
+        "spearman_rank_corr": 0.8225563909774435,
+        "brier_podium": 0.0647978111111111,
+        "brier_top6": 0.10544143333333333,
+        "brier_top10": 0.1261731888888889
+      },
+      {
+        "season": 2022,
+        "round": 19,
+        "win_logloss_multiclass": 3.050540510048986,
+        "win_logloss_binary_per_driver": 0.2015798423823433,
+        "spearman_rank_corr": 0.3398496240601503,
+        "brier_podium": 0.12208895555555552,
+        "brier_top6": 0.1618854,
+        "brier_top10": 0.22128741111111108
+      },
+      {
+        "season": 2022,
+        "round": 20,
+        "win_logloss_multiclass": 2.7699256048202976,
+        "win_logloss_binary_per_driver": 0.18696350796782385,
+        "spearman_rank_corr": 0.7037593984962407,
+        "brier_podium": 0.10790469999999999,
+        "brier_top6": 0.14637265555555554,
+        "brier_top10": 0.15314120000000003
+      },
+      {
+        "season": 2022,
+        "round": 21,
+        "win_logloss_multiclass": 2.15129564544782,
+        "win_logloss_binary_per_driver": 0.15313989131068223,
+        "spearman_rank_corr": 0.4060150375939849,
+        "brier_podium": 0.08902527777777777,
+        "brier_top6": 0.1571593888888889,
+        "brier_top10": 0.19894282222222223
+      },
+      {
+        "season": 2022,
+        "round": 22,
+        "win_logloss_multiclass": 2.664033315685436,
+        "win_logloss_binary_per_driver": 0.18122569710062042,
+        "spearman_rank_corr": 0.2796992481203007,
+        "brier_podium": 0.1301610222222222,
+        "brier_top6": 0.18171225555555554,
+        "brier_top10": 0.21480613333333332
+      },
+      {
+        "season": 2023,
+        "round": 1,
+        "win_logloss_multiclass": 2.43802306388915,
+        "win_logloss_binary_per_driver": 0.16907463402163256,
+        "spearman_rank_corr": 0.31729323308270674,
+        "brier_podium": 0.11323654444444445,
+        "brier_top6": 0.16708364444444448,
+        "brier_top10": 0.2173036
+      },
+      {
+        "season": 2023,
+        "round": 2,
+        "win_logloss_multiclass": 2.319392211310427,
+        "win_logloss_binary_per_driver": 0.1625205044260615,
+        "spearman_rank_corr": 0.4586466165413533,
+        "brier_podium": 0.12123515555555553,
+        "brier_top6": 0.14759323333333335,
+        "brier_top10": 0.17944533333333332
+      },
+      {
+        "season": 2023,
+        "round": 3,
+        "win_logloss_multiclass": 2.219470186283539,
+        "win_logloss_binary_per_driver": 0.156920641142195,
+        "spearman_rank_corr": 0.2270676691729323,
+        "brier_podium": 0.10425247777777777,
+        "brier_top6": 0.18918213333333334,
+        "brier_top10": 0.26833836666666666
+      },
+      {
+        "season": 2023,
+        "round": 4,
+        "win_logloss_multiclass": 2.1286317858706076,
+        "win_logloss_binary_per_driver": 0.15170137307336154,
+        "spearman_rank_corr": 0.8661654135338346,
+        "brier_podium": 0.09804362222222222,
+        "brier_top6": 0.13740563333333333,
+        "brier_top10": 0.16462403333333334
+      },
+      {
+        "season": 2023,
+        "round": 5,
+        "win_logloss_multiclass": 2.645075401940822,
+        "win_logloss_binary_per_driver": 0.18051420851638028,
+        "spearman_rank_corr": 0.8586466165413533,
+        "brier_podium": 0.10055603333333336,
+        "brier_top6": 0.1270802222222222,
+        "brier_top10": 0.15343843333333335
+      },
+      {
+        "season": 2023,
+        "round": 6,
+        "win_logloss_multiclass": 2.050530198185416,
+        "win_logloss_binary_per_driver": 0.147680333520646,
+        "spearman_rank_corr": 0.6962406015037594,
+        "brier_podium": 0.11798613333333333,
+        "brier_top6": 0.12818364444444447,
+        "brier_top10": 0.14803625555555558
+      },
+      {
+        "season": 2023,
+        "round": 7,
+        "win_logloss_multiclass": 1.9082932854840065,
+        "win_logloss_binary_per_driver": 0.139476368579966,
+        "spearman_rank_corr": 0.7338345864661654,
+        "brier_podium": 0.08659137777777777,
+        "brier_top6": 0.11906308888888888,
+        "brier_top10": 0.17429664444444443
+      },
+      {
+        "season": 2023,
+        "round": 8,
+        "win_logloss_multiclass": 1.9287253243012124,
+        "win_logloss_binary_per_driver": 0.14026822014732804,
+        "spearman_rank_corr": 0.6345864661654135,
+        "brier_podium": 0.10702233333333333,
+        "brier_top6": 0.1495328222222222,
+        "brier_top10": 0.18798435555555557
+      },
+      {
+        "season": 2023,
+        "round": 9,
+        "win_logloss_multiclass": 2.299257302901371,
+        "win_logloss_binary_per_driver": 0.16178040661161514,
+        "spearman_rank_corr": 0.7999999999999999,
+        "brier_podium": 0.10029345555555555,
+        "brier_top6": 0.15034191111111112,
+        "brier_top10": 0.14414173333333333
+      },
+      {
+        "season": 2023,
+        "round": 10,
+        "win_logloss_multiclass": 2.43802306388915,
+        "win_logloss_binary_per_driver": 0.16922209454665946,
+        "spearman_rank_corr": 0.6075187969924812,
+        "brier_podium": 0.11423342222222224,
+        "brier_top6": 0.17658126666666668,
+        "brier_top10": 0.1471663888888889
+      },
+      {
+        "season": 2023,
+        "round": 11,
+        "win_logloss_multiclass": 2.396895772465287,
+        "win_logloss_binary_per_driver": 0.16696666226325624,
+        "spearman_rank_corr": 0.7563909774436091,
+        "brier_podium": 0.10953771111111113,
+        "brier_top6": 0.15542007777777775,
+        "brier_top10": 0.15077085555555553
+      },
+      {
+        "season": 2023,
+        "round": 12,
+        "win_logloss_multiclass": 2.234926444520231,
+        "win_logloss_binary_per_driver": 0.15783197365096963,
+        "spearman_rank_corr": 0.4646616541353384,
+        "brier_podium": 0.09091282222222223,
+        "brier_top6": 0.13501921111111115,
+        "brier_top10": 0.1939357111111111
+      },
+      {
+        "season": 2023,
+        "round": 13,
+        "win_logloss_multiclass": 2.134249778174831,
+        "win_logloss_binary_per_driver": 0.15225151149477903,
+        "spearman_rank_corr": 0.4601503759398496,
+        "brier_podium": 0.11733715555555557,
+        "brier_top6": 0.19180423333333335,
+        "brier_top10": 0.22017695555555555
+      },
+      {
+        "season": 2023,
+        "round": 14,
+        "win_logloss_multiclass": 2.4418471603275536,
+        "win_logloss_binary_per_driver": 0.16929578824604838,
+        "spearman_rank_corr": 0.6390977443609022,
+        "brier_podium": 0.10395903333333331,
+        "brier_top6": 0.10608246666666668,
+        "brier_top10": 0.15776831111111111
+      },
+      {
+        "season": 2023,
+        "round": 15,
+        "win_logloss_multiclass": 2.076778424260352,
+        "win_logloss_binary_per_driver": 0.14904156371314214,
+        "spearman_rank_corr": 0.5654135338345864,
+        "brier_podium": 0.09422734444444444,
+        "brier_top6": 0.13820603333333334,
+        "brier_top10": 0.21284782222222223
+      },
+      {
+        "season": 2023,
+        "round": 16,
+        "win_logloss_multiclass": 1.9287253243012124,
+        "win_logloss_binary_per_driver": 0.1402801448074074,
+        "spearman_rank_corr": 0.7007518796992479,
+        "brier_podium": 0.1103540777777778,
+        "brier_top6": 0.1520953,
+        "brier_top10": 0.16741873333333332
+      },
+      {
+        "season": 2023,
+        "round": 17,
+        "win_logloss_multiclass": 2.2318160221058383,
+        "win_logloss_binary_per_driver": 0.15762689137076394,
+        "spearman_rank_corr": 0.4030075187969925,
+        "brier_podium": 0.12264451111111115,
+        "brier_top6": 0.1687542111111111,
+        "brier_top10": 0.2216604888888889
+      },
+      {
+        "season": 2023,
+        "round": 18,
+        "win_logloss_multiclass": 2.626470214109787,
+        "win_logloss_binary_per_driver": 0.17937141502751097,
+        "spearman_rank_corr": -0.007518796992481202,
+        "brier_podium": 0.1257058111111111,
+        "brier_top6": 0.1939972888888889,
+        "brier_top10": 0.2788757333333333
+      },
+      {
+        "season": 2023,
+        "round": 19,
+        "win_logloss_multiclass": 2.445685936634719,
+        "win_logloss_binary_per_driver": 0.16953809194189065,
+        "spearman_rank_corr": 0.5969924812030075,
+        "brier_podium": 0.09720858888888888,
+        "brier_top6": 0.13040843333333335,
+        "brier_top10": 0.1861295
+      },
+      {
+        "season": 2023,
+        "round": 20,
+        "win_logloss_multiclass": 2.50510935710552,
+        "win_logloss_binary_per_driver": 0.17271656701195842,
+        "spearman_rank_corr": 0.30526315789473685,
+        "brier_podium": 0.12491737777777778,
+        "brier_top6": 0.19021645555555555,
+        "brier_top10": 0.23282936666666668
+      },
+      {
+        "season": 2023,
+        "round": 21,
+        "win_logloss_multiclass": 1.8794983835360617,
+        "win_logloss_binary_per_driver": 0.13790266413323998,
+        "spearman_rank_corr": 0.78796992481203,
+        "brier_podium": 0.08573213333333334,
+        "brier_top6": 0.14712564444444448,
+        "brier_top10": 0.16704417777777777
+      },
+      {
+        "season": 2023,
+        "round": 22,
+        "win_logloss_multiclass": 2.222542385320509,
+        "win_logloss_binary_per_driver": 0.15710777916215568,
+        "spearman_rank_corr": 0.7774436090225564,
+        "brier_podium": 0.09163921111111109,
+        "brier_top6": 0.1438149,
+        "brier_top10": 0.17141802222222222
+      },
+      {
+        "season": 2024,
+        "round": 1,
+        "win_logloss_multiclass": 1.40649706843741,
+        "win_logloss_binary_per_driver": 0.10897180206563543,
+        "spearman_rank_corr": 0.8977443609022555,
+        "brier_podium": 0.08876725555555554,
+        "brier_top6": 0.1357472,
+        "brier_top10": 0.1405547888888889
+      },
+      {
+        "season": 2024,
+        "round": 2,
+        "win_logloss_multiclass": 1.4368861472359509,
+        "win_logloss_binary_per_driver": 0.11091564953602562,
+        "spearman_rank_corr": 0.7458646616541353,
+        "brier_podium": 0.08288596666666666,
+        "brier_top6": 0.1385722888888889,
+        "brier_top10": 0.15689141111111113
+      },
+      {
+        "season": 2024,
+        "round": 3,
+        "win_logloss_multiclass": 2.6736487743848776,
+        "win_logloss_binary_per_driver": 0.19261073577315047,
+        "spearman_rank_corr": 0.3877192982456141,
+        "brier_podium": 0.13343562573099416,
+        "brier_top6": 0.18647266666666668,
+        "brier_top10": 0.2443378947368421
+      },
+      {
+        "season": 2024,
+        "round": 4,
+        "win_logloss_multiclass": 1.6838023277229628,
+        "win_logloss_binary_per_driver": 0.12605180116827983,
+        "spearman_rank_corr": 0.819548872180451,
+        "brier_podium": 0.0816697,
+        "brier_top6": 0.14204944444444442,
+        "brier_top10": 0.14868125555555556
+      },
+      {
+        "season": 2024,
+        "round": 5,
+        "win_logloss_multiclass": 1.3612765981446027,
+        "win_logloss_binary_per_driver": 0.10625296417406487,
+        "spearman_rank_corr": 0.8586466165413533,
+        "brier_podium": 0.07631474444444446,
+        "brier_top6": 0.1329893333333333,
+        "brier_top10": 0.14192092222222222
+      },
+      {
+        "season": 2024,
+        "round": 6,
+        "win_logloss_multiclass": 2.396895772465287,
+        "win_logloss_binary_per_driver": 0.1668792948023364,
+        "spearman_rank_corr": 0.8481203007518796,
+        "brier_podium": 0.09189914444444444,
+        "brier_top6": 0.12965751111111112,
+        "brier_top10": 0.17115913333333332
+      },
+      {
+        "season": 2024,
+        "round": 7,
+        "win_logloss_multiclass": 1.581498543744859,
+        "win_logloss_binary_per_driver": 0.11987722633456485,
+        "spearman_rank_corr": 0.8947368421052632,
+        "brier_podium": 0.08027082222222223,
+        "brier_top6": 0.12513996666666666,
+        "brier_top10": 0.13896195555555552
+      },
+      {
+        "season": 2024,
+        "round": 8,
+        "win_logloss_multiclass": 2.41538058713939,
+        "win_logloss_binary_per_driver": 0.16766373961264608,
+        "spearman_rank_corr": 0.7593984962406014,
+        "brier_podium": 0.11373214444444449,
+        "brier_top6": 0.15034,
+        "brier_top10": 0.15941523333333335
+      },
+      {
+        "season": 2024,
+        "round": 9,
+        "win_logloss_multiclass": 2.090165505042812,
+        "win_logloss_binary_per_driver": 0.14958338253471673,
+        "spearman_rank_corr": 0.6225563909774435,
+        "brier_podium": 0.09401313333333332,
+        "brier_top6": 0.13930083333333332,
+        "brier_top10": 0.17927173333333335
+      },
+      {
+        "season": 2024,
+        "round": 10,
+        "win_logloss_multiclass": 1.9449106487222299,
+        "win_logloss_binary_per_driver": 0.14142658260344537,
+        "spearman_rank_corr": 0.9157894736842105,
+        "brier_podium": 0.0866808222222222,
+        "brier_top6": 0.11347572222222221,
+        "brier_top10": 0.1283296333333333
+      },
+      {
+        "season": 2024,
+        "round": 11,
+        "win_logloss_multiclass": 2.501036031717884,
+        "win_logloss_binary_per_driver": 0.17258259701958734,
+        "spearman_rank_corr": 0.6330827067669172,
+        "brier_podium": 0.11969825555555554,
+        "brier_top6": 0.16103589999999998,
+        "brier_top10": 0.1975769888888889
+      },
+      {
+        "season": 2024,
+        "round": 12,
+        "win_logloss_multiclass": 2.626470214109787,
+        "win_logloss_binary_per_driver": 0.17949144915526288,
+        "spearman_rank_corr": 0.5323308270676691,
+        "brier_podium": 0.09140671111111112,
+        "brier_top6": 0.15515135555555554,
+        "brier_top10": 0.21093291111111112
+      },
+      {
+        "season": 2024,
+        "round": 13,
+        "win_logloss_multiclass": 2.743677378745361,
+        "win_logloss_binary_per_driver": 0.18573441287275563,
+        "spearman_rank_corr": 0.9203007518796992,
+        "brier_podium": 0.12044144444444442,
+        "brier_top6": 0.13146354444444447,
+        "brier_top10": 0.15743802222222222
+      },
+      {
+        "season": 2024,
+        "round": 14,
+        "win_logloss_multiclass": 2.70805020110221,
+        "win_logloss_binary_per_driver": 0.1837729194094447,
+        "spearman_rank_corr": 0.7834586466165413,
+        "brier_podium": 0.11952611111111111,
+        "brier_top6": 0.14102707777777782,
+        "brier_top10": 0.1547159111111111
+      },
+      {
+        "season": 2024,
+        "round": 15,
+        "win_logloss_multiclass": 2.0874737133771,
+        "win_logloss_binary_per_driver": 0.14950018997388864,
+        "spearman_rank_corr": 0.9308270676691727,
+        "brier_podium": 0.09184747777777777,
+        "brier_top6": 0.13001394444444442,
+        "brier_top10": 0.15798105555555556
+      },
+      {
+        "season": 2024,
+        "round": 16,
+        "win_logloss_multiclass": 2.9187712324178627,
+        "win_logloss_binary_per_driver": 0.19494828810929893,
+        "spearman_rank_corr": 0.7849624060150376,
+        "brier_podium": 0.10844065555555553,
+        "brier_top6": 0.12755832222222224,
+        "brier_top10": 0.1489080333333333
+      },
+      {
+        "season": 2024,
+        "round": 17,
+        "win_logloss_multiclass": 2.4769384801388235,
+        "win_logloss_binary_per_driver": 0.17105384635527526,
+        "spearman_rank_corr": 0.27368421052631575,
+        "brier_podium": 0.11364885555555553,
+        "brier_top6": 0.17992304444444446,
+        "brier_top10": 0.2179984666666667
+      },
+      {
+        "season": 2024,
+        "round": 18,
+        "win_logloss_multiclass": 2.3261949586331796,
+        "win_logloss_binary_per_driver": 0.16285701353319704,
+        "spearman_rank_corr": 0.8766917293233082,
+        "brier_podium": 0.10341010000000002,
+        "brier_top6": 0.1280066888888889,
+        "brier_top10": 0.14978560000000002
+      },
+      {
+        "season": 2024,
+        "round": 19,
+        "win_logloss_multiclass": 2.4769384801388235,
+        "win_logloss_binary_per_driver": 0.17123771202050536,
+        "spearman_rank_corr": 0.7037593984962407,
+        "brier_podium": 0.10119280000000001,
+        "brier_top6": 0.12494226666666666,
+        "brier_top10": 0.17812440000000002
+      },
+      {
+        "season": 2024,
+        "round": 20,
+        "win_logloss_multiclass": 2.683357588511839,
+        "win_logloss_binary_per_driver": 0.1823601945935131,
+        "spearman_rank_corr": 0.7488721804511278,
+        "brier_podium": 0.09847944444444443,
+        "brier_top6": 0.12537307777777776,
+        "brier_top10": 0.1682405333333333
+      },
+      {
+        "season": 2024,
+        "round": 21,
+        "win_logloss_multiclass": 2.7914318100412614,
+        "win_logloss_binary_per_driver": 0.18828887221453786,
+        "spearman_rank_corr": 0.6992481203007518,
+        "brier_podium": 0.13515154444444447,
+        "brier_top6": 0.15832721111111114,
+        "brier_top10": 0.16596438888888893
+      },
+      {
+        "season": 2024,
+        "round": 22,
+        "win_logloss_multiclass": 2.6882475738060303,
+        "win_logloss_binary_per_driver": 0.18252687492542014,
+        "spearman_rank_corr": 0.7052631578947368,
+        "brier_podium": 0.11320224444444445,
+        "brier_top6": 0.1337537777777778,
+        "brier_top10": 0.14939907777777778
+      },
+      {
+        "season": 2024,
+        "round": 23,
+        "win_logloss_multiclass": 2.4116561880484078,
+        "win_logloss_binary_per_driver": 0.16761920314313009,
+        "spearman_rank_corr": 0.6300751879699248,
+        "brier_podium": 0.10521178888888887,
+        "brier_top6": 0.13950515555555557,
+        "brier_top10": 0.1802366777777778
+      },
+      {
+        "season": 2024,
+        "round": 24,
+        "win_logloss_multiclass": 2.461190123170684,
+        "win_logloss_binary_per_driver": 0.1701336127830941,
+        "spearman_rank_corr": 0.6601503759398496,
+        "brier_podium": 0.10895726666666665,
+        "brier_top6": 0.15372929999999999,
+        "brier_top10": 0.16387425555555557
+      }
+    ],
+    "candidate": [
+      {
+        "season": 2022,
+        "round": 1,
+        "win_logloss_multiclass": 2.2072749131897207,
+        "win_logloss_binary_per_driver": 0.15633272591259134,
+        "spearman_rank_corr": 0.27669172932330827,
+        "brier_podium": 0.09689275555555557,
+        "brier_top6": 0.17085324444444444,
+        "brier_top10": 0.24840718888888888
+      },
+      {
+        "season": 2022,
+        "round": 2,
+        "win_logloss_multiclass": 3.2188758248682006,
+        "win_logloss_binary_per_driver": 0.21064312347789044,
+        "spearman_rank_corr": 0.4330827067669173,
+        "brier_podium": 0.1252578666666667,
+        "brier_top6": 0.15999334444444444,
+        "brier_top10": 0.21503657777777777
+      },
+      {
+        "season": 2022,
+        "round": 3,
+        "win_logloss_multiclass": 1.646793698977869,
+        "win_logloss_binary_per_driver": 0.1243607902320055,
+        "spearman_rank_corr": 0.4827067669172932,
+        "brier_podium": 0.07095543333333335,
+        "brier_top6": 0.14098295555555554,
+        "brier_top10": 0.17900565555555556
+      },
+      {
+        "season": 2022,
+        "round": 4,
+        "win_logloss_multiclass": 2.286055791042835,
+        "win_logloss_binary_per_driver": 0.1606620262772406,
+        "spearman_rank_corr": 0.38646616541353385,
+        "brier_podium": 0.09562598888888889,
+        "brier_top6": 0.16146694444444445,
+        "brier_top10": 0.24393632222222222
+      },
+      {
+        "season": 2022,
+        "round": 5,
+        "win_logloss_multiclass": 1.7092582477163114,
+        "win_logloss_binary_per_driver": 0.12815020754267412,
+        "spearman_rank_corr": 0.8090225563909773,
+        "brier_podium": 0.06090163333333333,
+        "brier_top6": 0.12461004444444443,
+        "brier_top10": 0.17525657777777776
+      },
+      {
+        "season": 2022,
+        "round": 6,
+        "win_logloss_multiclass": 2.9501217623019387,
+        "win_logloss_binary_per_driver": 0.19640027080913672,
+        "spearman_rank_corr": 0.5503759398496241,
+        "brier_podium": 0.11534738888888889,
+        "brier_top6": 0.16102768888888888,
+        "brier_top10": 0.20379051111111113
+      },
+      {
+        "season": 2022,
+        "round": 7,
+        "win_logloss_multiclass": 2.640391552628395,
+        "win_logloss_binary_per_driver": 0.1800449689218129,
+        "spearman_rank_corr": 0.7789473684210525,
+        "brier_podium": 0.09752705555555555,
+        "brier_top6": 0.14058405555555556,
+        "brier_top10": 0.15999403333333337
+      },
+      {
+        "season": 2022,
+        "round": 8,
+        "win_logloss_multiclass": 3.270169119255751,
+        "win_logloss_binary_per_driver": 0.21313321260920026,
+        "spearman_rank_corr": -0.05864661654135337,
+        "brier_podium": 0.1440666333333333,
+        "brier_top6": 0.20700755555555556,
+        "brier_top10": 0.22866401111111107
+      },
+      {
+        "season": 2022,
+        "round": 9,
+        "win_logloss_multiclass": 1.1918246703902886,
+        "win_logloss_binary_per_driver": 0.09534440174406564,
+        "spearman_rank_corr": 0.6571428571428571,
+        "brier_podium": 0.06838382222222222,
+        "brier_top6": 0.12944032222222224,
+        "brier_top10": 0.1647578
+      },
+      {
+        "season": 2022,
+        "round": 10,
+        "win_logloss_multiclass": 2.65450943417418,
+        "win_logloss_binary_per_driver": 0.18081194645500734,
+        "spearman_rank_corr": 0.26315789473684204,
+        "brier_podium": 0.10954738888888889,
+        "brier_top6": 0.14558234444444446,
+        "brier_top10": 0.23174141111111113
+      },
+      {
+        "season": 2022,
+        "round": 11,
+        "win_logloss_multiclass": 2.213353959266103,
+        "win_logloss_binary_per_driver": 0.1568538357750187,
+        "spearman_rank_corr": 0.3443609022556391,
+        "brier_podium": 0.10803878888888889,
+        "brier_top6": 0.1679579,
+        "brier_top10": 0.23370484444444442
+      },
+      {
+        "season": 2022,
+        "round": 12,
+        "win_logloss_multiclass": 2.8764688527271733,
+        "win_logloss_binary_per_driver": 0.19260523735308727,
+        "spearman_rank_corr": 0.6030075187969924,
+        "brier_podium": 0.12203177777777777,
+        "brier_top6": 0.16921198888888891,
+        "brier_top10": 0.1830731777777778
+      },
+      {
+        "season": 2022,
+        "round": 13,
+        "win_logloss_multiclass": 3.270169119255751,
+        "win_logloss_binary_per_driver": 0.21331002390930495,
+        "spearman_rank_corr": 0.47218045112781953,
+        "brier_podium": 0.1247649666666667,
+        "brier_top6": 0.1931804,
+        "brier_top10": 0.19077582222222222
+      },
+      {
+        "season": 2022,
+        "round": 14,
+        "win_logloss_multiclass": 2.818981761809492,
+        "win_logloss_binary_per_driver": 0.18938883380146965,
+        "spearman_rank_corr": 0.7398496240601502,
+        "brier_podium": 0.11835684444444443,
+        "brier_top6": 0.15905296666666663,
+        "brier_top10": 0.1875636333333333
+      },
+      {
+        "season": 2022,
+        "round": 15,
+        "win_logloss_multiclass": 2.9187712324178627,
+        "win_logloss_binary_per_driver": 0.1950260187476106,
+        "spearman_rank_corr": 0.6992481203007518,
+        "brier_podium": 0.10761845555555556,
+        "brier_top6": 0.1288707666666667,
+        "brier_top10": 0.13064122222222224
+      },
+      {
+        "season": 2022,
+        "round": 16,
+        "win_logloss_multiclass": 3.4524906760497056,
+        "win_logloss_binary_per_driver": 0.22253604896131018,
+        "spearman_rank_corr": 0.21654135338345865,
+        "brier_podium": 0.1325461111111111,
+        "brier_top6": 0.1989585777777778,
+        "brier_top10": 0.23896025555555558
+      },
+      {
+        "season": 2022,
+        "round": 17,
+        "win_logloss_multiclass": 1.9425823589626385,
+        "win_logloss_binary_per_driver": 0.14281132679325192,
+        "spearman_rank_corr": 0.7954887218045112,
+        "brier_podium": 0.0759196,
+        "brier_top6": 0.162379,
+        "brier_top10": 0.13358883333333332
+      },
+      {
+        "season": 2022,
+        "round": 18,
+        "win_logloss_multiclass": 1.202862310041909,
+        "win_logloss_binary_per_driver": 0.09638300843323887,
+        "spearman_rank_corr": 0.7789473684210525,
+        "brier_podium": 0.06157162222222222,
+        "brier_top6": 0.10558238888888886,
+        "brier_top10": 0.13207553333333333
+      },
+      {
+        "season": 2022,
+        "round": 19,
+        "win_logloss_multiclass": 2.9565115604007097,
+        "win_logloss_binary_per_driver": 0.19676213926452618,
+        "spearman_rank_corr": 0.3789473684210526,
+        "brier_podium": 0.10835202222222222,
+        "brier_top6": 0.15645812222222222,
+        "brier_top10": 0.22206435555555554
+      },
+      {
+        "season": 2022,
+        "round": 20,
+        "win_logloss_multiclass": 2.8764688527271733,
+        "win_logloss_binary_per_driver": 0.192729567691163,
+        "spearman_rank_corr": 0.625563909774436,
+        "brier_podium": 0.1021585,
+        "brier_top6": 0.12775295555555558,
+        "brier_top10": 0.1563361
+      },
+      {
+        "season": 2022,
+        "round": 21,
+        "win_logloss_multiclass": 2.2537949288246137,
+        "win_logloss_binary_per_driver": 0.15894070021239765,
+        "spearman_rank_corr": 0.556390977443609,
+        "brier_podium": 0.08817317777777779,
+        "brier_top6": 0.1429678777777778,
+        "brier_top10": 0.18674138888888892
+      },
+      {
+        "season": 2022,
+        "round": 22,
+        "win_logloss_multiclass": 2.49697923102227,
+        "win_logloss_binary_per_driver": 0.17219626232751062,
+        "spearman_rank_corr": 0.4030075187969925,
+        "brier_podium": 0.12019894444444448,
+        "brier_top6": 0.1668213,
+        "brier_top10": 0.20913179999999998
+      },
+      {
+        "season": 2023,
+        "round": 1,
+        "win_logloss_multiclass": 2.0000144080485143,
+        "win_logloss_binary_per_driver": 0.14471466601254218,
+        "spearman_rank_corr": 0.3804511278195489,
+        "brier_podium": 0.1006984,
+        "brier_top6": 0.15714425555555556,
+        "brier_top10": 0.20747785555555556
+      },
+      {
+        "season": 2023,
+        "round": 2,
+        "win_logloss_multiclass": 1.8430527636156055,
+        "win_logloss_binary_per_driver": 0.13550426733643559,
+        "spearman_rank_corr": 0.6406015037593984,
+        "brier_podium": 0.10595768888888887,
+        "brier_top6": 0.12953483333333335,
+        "brier_top10": 0.16368835555555558
+      },
+      {
+        "season": 2023,
+        "round": 3,
+        "win_logloss_multiclass": 1.9853442183007204,
+        "win_logloss_binary_per_driver": 0.143740182065069,
+        "spearman_rank_corr": 0.23609022556390977,
+        "brier_podium": 0.09673068888888889,
+        "brier_top6": 0.18414844444444448,
+        "brier_top10": 0.27407220000000004
+      },
+      {
+        "season": 2023,
+        "round": 4,
+        "win_logloss_multiclass": 1.9425823589626385,
+        "win_logloss_binary_per_driver": 0.14121474452940003,
+        "spearman_rank_corr": 0.8210526315789473,
+        "brier_podium": 0.08448306666666668,
+        "brier_top6": 0.1263460777777778,
+        "brier_top10": 0.15589468888888888
+      },
+      {
+        "season": 2023,
+        "round": 5,
+        "win_logloss_multiclass": 2.7385094085869186,
+        "win_logloss_binary_per_driver": 0.18593074604842383,
+        "spearman_rank_corr": 0.8180451127819548,
+        "brier_podium": 0.09727030000000003,
+        "brier_top6": 0.11789482222222222,
+        "brier_top10": 0.1480285222222222
+      },
+      {
+        "season": 2023,
+        "round": 6,
+        "win_logloss_multiclass": 1.8038320504623242,
+        "win_logloss_binary_per_driver": 0.13336564684108368,
+        "spearman_rank_corr": 0.7518796992481201,
+        "brier_podium": 0.10369033333333336,
+        "brier_top6": 0.1300809888888889,
+        "brier_top10": 0.13675663333333335
+      },
+      {
+        "season": 2023,
+        "round": 7,
+        "win_logloss_multiclass": 1.720369473141382,
+        "win_logloss_binary_per_driver": 0.12852344950519423,
+        "spearman_rank_corr": 0.7894736842105263,
+        "brier_podium": 0.08703358888888887,
+        "brier_top6": 0.11292178888888889,
+        "brier_top10": 0.16847176666666666
+      },
+      {
+        "season": 2023,
+        "round": 8,
+        "win_logloss_multiclass": 1.612776813699615,
+        "win_logloss_binary_per_driver": 0.12169261985647029,
+        "spearman_rank_corr": 0.7127819548872181,
+        "brier_podium": 0.09030587777777778,
+        "brier_top6": 0.13394937777777777,
+        "brier_top10": 0.18321496666666665
+      },
+      {
+        "season": 2023,
+        "round": 9,
+        "win_logloss_multiclass": 1.8078888511579385,
+        "win_logloss_binary_per_driver": 0.133942371815089,
+        "spearman_rank_corr": 0.8571428571428572,
+        "brier_podium": 0.08236494444444445,
+        "brier_top6": 0.13554842222222224,
+        "brier_top10": 0.13846882222222226
+      },
+      {
+        "season": 2023,
+        "round": 10,
+        "win_logloss_multiclass": 1.820158943749753,
+        "win_logloss_binary_per_driver": 0.13424157145484344,
+        "spearman_rank_corr": 0.7669172932330827,
+        "brier_podium": 0.09195596666666664,
+        "brier_top6": 0.1519405,
+        "brier_top10": 0.1370690111111111
+      },
+      {
+        "season": 2023,
+        "round": 11,
+        "win_logloss_multiclass": 2.0847891480064313,
+        "win_logloss_binary_per_driver": 0.14979316913856705,
+        "spearman_rank_corr": 0.7022556390977444,
+        "brier_podium": 0.11356425555555556,
+        "brier_top6": 0.15493653333333332,
+        "brier_top10": 0.16624467777777777
+      },
+      {
+        "season": 2023,
+        "round": 12,
+        "win_logloss_multiclass": 2.1064702140677554,
+        "win_logloss_binary_per_driver": 0.15089691447259213,
+        "spearman_rank_corr": 0.5293233082706766,
+        "brier_podium": 0.08093754444444444,
+        "brier_top6": 0.11748052222222223,
+        "brier_top10": 0.1856494111111111
+      },
+      {
+        "season": 2023,
+        "round": 13,
+        "win_logloss_multiclass": 1.7448758833292046,
+        "win_logloss_binary_per_driver": 0.12970579564179036,
+        "spearman_rank_corr": 0.4601503759398496,
+        "brier_podium": 0.10747043333333332,
+        "brier_top6": 0.1835816222222222,
+        "brier_top10": 0.21987159999999997
+      },
+      {
+        "season": 2023,
+        "round": 14,
+        "win_logloss_multiclass": 2.2506253540633345,
+        "win_logloss_binary_per_driver": 0.15905779464930578,
+        "spearman_rank_corr": 0.7473684210526315,
+        "brier_podium": 0.08467253333333333,
+        "brier_top6": 0.09179449999999999,
+        "brier_top10": 0.1577731111111111
+      },
+      {
+        "season": 2023,
+        "round": 15,
+        "win_logloss_multiclass": 1.6572285762704488,
+        "win_logloss_binary_per_driver": 0.12482248919981534,
+        "spearman_rank_corr": 0.7669172932330827,
+        "brier_podium": 0.09464986666666667,
+        "brier_top6": 0.14055553333333332,
+        "brier_top10": 0.19998566666666667
+      },
+      {
+        "season": 2023,
+        "round": 16,
+        "win_logloss_multiclass": 1.5734274749110673,
+        "win_logloss_binary_per_driver": 0.1193056718695817,
+        "spearman_rank_corr": 0.7954887218045112,
+        "brier_podium": 0.08994344444444444,
+        "brier_top6": 0.1266900222222222,
+        "brier_top10": 0.14613557777777778
+      },
+      {
+        "season": 2023,
+        "round": 17,
+        "win_logloss_multiclass": 1.8078888511579385,
+        "win_logloss_binary_per_driver": 0.1335518823450897,
+        "spearman_rank_corr": 0.393984962406015,
+        "brier_podium": 0.1128314777777778,
+        "brier_top6": 0.15757462222222224,
+        "brier_top10": 0.21905605555555557
+      },
+      {
+        "season": 2023,
+        "round": 18,
+        "win_logloss_multiclass": 2.3573933294890406,
+        "win_logloss_binary_per_driver": 0.1649747028880087,
+        "spearman_rank_corr": 0.05263157894736842,
+        "brier_podium": 0.11905924444444445,
+        "brier_top6": 0.18608144444444444,
+        "brier_top10": 0.27837825555555556
+      },
+      {
+        "season": 2023,
+        "round": 19,
+        "win_logloss_multiclass": 2.071473372030659,
+        "win_logloss_binary_per_driver": 0.14892145831278364,
+        "spearman_rank_corr": 0.5323308270676691,
+        "brier_podium": 0.08327284444444447,
+        "brier_top6": 0.11826998888888889,
+        "brier_top10": 0.1839275333333333
+      },
+      {
+        "season": 2023,
+        "round": 20,
+        "win_logloss_multiclass": 2.004952689689097,
+        "win_logloss_binary_per_driver": 0.14499969071169466,
+        "spearman_rank_corr": 0.3969924812030075,
+        "brier_podium": 0.11114446666666666,
+        "brier_top6": 0.18358468888888888,
+        "brier_top10": 0.23233520000000002
+      },
+      {
+        "season": 2023,
+        "round": 21,
+        "win_logloss_multiclass": 1.6642461489290954,
+        "win_logloss_binary_per_driver": 0.12570564840701248,
+        "spearman_rank_corr": 0.7458646616541353,
+        "brier_podium": 0.07348217777777778,
+        "brier_top6": 0.15227506666666665,
+        "brier_top10": 0.16681331111111114
+      },
+      {
+        "season": 2023,
+        "round": 22,
+        "win_logloss_multiclass": 1.9127977976051111,
+        "win_logloss_binary_per_driver": 0.1395506494448449,
+        "spearman_rank_corr": 0.7804511278195487,
+        "brier_podium": 0.08707278888888889,
+        "brier_top6": 0.13605446666666668,
+        "brier_top10": 0.16036894444444444
+      },
+      {
+        "season": 2024,
+        "round": 1,
+        "win_logloss_multiclass": 1.5448993912965292,
+        "win_logloss_binary_per_driver": 0.11760376564168928,
+        "spearman_rank_corr": 0.8781954887218045,
+        "brier_podium": 0.08831431111111113,
+        "brier_top6": 0.11914231111111111,
+        "brier_top10": 0.13997359999999998
+      },
+      {
+        "season": 2024,
+        "round": 2,
+        "win_logloss_multiclass": 1.4257284303652977,
+        "win_logloss_binary_per_driver": 0.11020457461750344,
+        "spearman_rank_corr": 0.7413533834586465,
+        "brier_podium": 0.07803342222222223,
+        "brier_top6": 0.13749126666666664,
+        "brier_top10": 0.16125632222222222
+      },
+      {
+        "season": 2024,
+        "round": 3,
+        "win_logloss_multiclass": 2.434213535472482,
+        "win_logloss_binary_per_driver": 0.17894668676539993,
+        "spearman_rank_corr": 0.4140350877192982,
+        "brier_podium": 0.12048614035087721,
+        "brier_top6": 0.1771624795321637,
+        "brier_top10": 0.23780211695906434
+      },
+      {
+        "season": 2024,
+        "round": 4,
+        "win_logloss_multiclass": 1.6194882482876019,
+        "win_logloss_binary_per_driver": 0.12224616777533096,
+        "spearman_rank_corr": 0.7984962406015037,
+        "brier_podium": 0.07804016666666666,
+        "brier_top6": 0.1302785777777778,
+        "brier_top10": 0.13465935555555555
+      },
+      {
+        "season": 2024,
+        "round": 5,
+        "win_logloss_multiclass": 1.310568650591755,
+        "win_logloss_binary_per_driver": 0.10305623561403307,
+        "spearman_rank_corr": 0.8766917293233082,
+        "brier_podium": 0.07112524444444444,
+        "brier_top6": 0.1305869888888889,
+        "brier_top10": 0.13754547777777776
+      },
+      {
+        "season": 2024,
+        "round": 6,
+        "win_logloss_multiclass": 2.577021938695806,
+        "win_logloss_binary_per_driver": 0.1770799002733776,
+        "spearman_rank_corr": 0.7804511278195487,
+        "brier_podium": 0.08600769999999999,
+        "brier_top6": 0.1178868,
+        "brier_top10": 0.16707864444444445
+      },
+      {
+        "season": 2024,
+        "round": 7,
+        "win_logloss_multiclass": 1.6802180944951477,
+        "win_logloss_binary_per_driver": 0.12591179893703883,
+        "spearman_rank_corr": 0.8962406015037594,
+        "brier_podium": 0.07630790000000001,
+        "brier_top6": 0.12262405555555556,
+        "brier_top10": 0.13456713333333334
+      },
+      {
+        "season": 2024,
+        "round": 8,
+        "win_logloss_multiclass": 1.820158943749753,
+        "win_logloss_binary_per_driver": 0.13404232484131334,
+        "spearman_rank_corr": 0.7699248120300751,
+        "brier_podium": 0.08989941111111112,
+        "brier_top6": 0.12626361111111112,
+        "brier_top10": 0.1507869
+      },
+      {
+        "season": 2024,
+        "round": 9,
+        "win_logloss_multiclass": 2.137070654516472,
+        "win_logloss_binary_per_driver": 0.15230474327073443,
+        "spearman_rank_corr": 0.6375939849624059,
+        "brier_podium": 0.08634916666666667,
+        "brier_top6": 0.1297787,
+        "brier_top10": 0.1786816666666666
+      },
+      {
+        "season": 2024,
+        "round": 10,
+        "win_logloss_multiclass": 1.8860701486992963,
+        "win_logloss_binary_per_driver": 0.13818121511483197,
+        "spearman_rank_corr": 0.9458646616541352,
+        "brier_podium": 0.0769501111111111,
+        "brier_top6": 0.10901637777777776,
+        "brier_top10": 0.1372885666666667
+      },
+      {
+        "season": 2024,
+        "round": 11,
+        "win_logloss_multiclass": 2.5215706341595916,
+        "win_logloss_binary_per_driver": 0.17399042456639988,
+        "spearman_rank_corr": 0.544360902255639,
+        "brier_podium": 0.11946047777777777,
+        "brier_top6": 0.15379838888888886,
+        "brier_top10": 0.20615755555555562
+      },
+      {
+        "season": 2024,
+        "round": 12,
+        "win_logloss_multiclass": 2.5383074265151158,
+        "win_logloss_binary_per_driver": 0.1744817433968642,
+        "spearman_rank_corr": 0.5172932330827067,
+        "brier_podium": 0.09644092222222223,
+        "brier_top6": 0.1537123,
+        "brier_top10": 0.21866100000000005
+      },
+      {
+        "season": 2024,
+        "round": 13,
+        "win_logloss_multiclass": 2.299257302901371,
+        "win_logloss_binary_per_driver": 0.16162542416454395,
+        "spearman_rank_corr": 0.8842105263157894,
+        "brier_podium": 0.10239743333333332,
+        "brier_top6": 0.11031766666666669,
+        "brier_top10": 0.14561876666666668
+      },
+      {
+        "season": 2024,
+        "round": 14,
+        "win_logloss_multiclass": 2.572645564096007,
+        "win_logloss_binary_per_driver": 0.17644479573602087,
+        "spearman_rank_corr": 0.7639097744360903,
+        "brier_podium": 0.10727116666666667,
+        "brier_top6": 0.13022204444444443,
+        "brier_top10": 0.1547722111111111
+      },
+      {
+        "season": 2024,
+        "round": 15,
+        "win_logloss_multiclass": 1.7563923253907636,
+        "win_logloss_binary_per_driver": 0.13043965298516866,
+        "spearman_rank_corr": 0.9308270676691727,
+        "brier_podium": 0.08332609999999999,
+        "brier_top6": 0.12367741111111116,
+        "brier_top10": 0.15027736666666666
+      },
+      {
+        "season": 2024,
+        "round": 16,
+        "win_logloss_multiclass": 2.7231638389122583,
+        "win_logloss_binary_per_driver": 0.18455284842958225,
+        "spearman_rank_corr": 0.7669172932330827,
+        "brier_podium": 0.09899727777777777,
+        "brier_top6": 0.1325994888888889,
+        "brier_top10": 0.1432988
+      },
+      {
+        "season": 2024,
+        "round": 17,
+        "win_logloss_multiclass": 2.509199342357045,
+        "win_logloss_binary_per_driver": 0.17307736281476338,
+        "spearman_rank_corr": 0.35187969924812035,
+        "brier_podium": 0.10350043333333332,
+        "brier_top6": 0.17708137777777777,
+        "brier_top10": 0.22948427777777777
+      },
+      {
+        "season": 2024,
+        "round": 18,
+        "win_logloss_multiclass": 2.2072749131897207,
+        "win_logloss_binary_per_driver": 0.15620670414265286,
+        "spearman_rank_corr": 0.8526315789473683,
+        "brier_podium": 0.1009907888888889,
+        "brier_top6": 0.1313406222222222,
+        "brier_top10": 0.15100453333333336
+      },
+      {
+        "season": 2024,
+        "round": 19,
+        "win_logloss_multiclass": 2.6736487743848776,
+        "win_logloss_binary_per_driver": 0.1823113032730868,
+        "spearman_rank_corr": 0.6496240601503759,
+        "brier_podium": 0.0999537,
+        "brier_top6": 0.12127386666666666,
+        "brier_top10": 0.18529214444444445
+      },
+      {
+        "season": 2024,
+        "round": 20,
+        "win_logloss_multiclass": 2.286055791042835,
+        "win_logloss_binary_per_driver": 0.16078898706580252,
+        "spearman_rank_corr": 0.6285714285714286,
+        "brier_podium": 0.09083744444444446,
+        "brier_top6": 0.11708505555555555,
+        "brier_top10": 0.17329336666666667
+      },
+      {
+        "season": 2024,
+        "round": 21,
+        "win_logloss_multiclass": 2.906501139826048,
+        "win_logloss_binary_per_driver": 0.19485699800033585,
+        "spearman_rank_corr": 0.6481203007518795,
+        "brier_podium": 0.1431450222222222,
+        "brier_top6": 0.16366853333333334,
+        "brier_top10": 0.17217373333333336
+      },
+      {
+        "season": 2024,
+        "round": 22,
+        "win_logloss_multiclass": 2.2633643798407643,
+        "win_logloss_binary_per_driver": 0.1593339360567419,
+        "spearman_rank_corr": 0.6631578947368421,
+        "brier_podium": 0.10516704444444444,
+        "brier_top6": 0.12826923333333332,
+        "brier_top10": 0.15876618888888888
+      },
+      {
+        "season": 2024,
+        "round": 23,
+        "win_logloss_multiclass": 1.995100393246085,
+        "win_logloss_binary_per_driver": 0.14440920215901198,
+        "spearman_rank_corr": 0.6872180451127818,
+        "brier_podium": 0.10108186666666667,
+        "brier_top6": 0.1378913333333333,
+        "brier_top10": 0.17544411111111108
+      },
+      {
+        "season": 2024,
+        "round": 24,
+        "win_logloss_multiclass": 1.9082932854840065,
+        "win_logloss_binary_per_driver": 0.13918511973601547,
+        "spearman_rank_corr": 0.6947368421052631,
+        "brier_podium": 0.09798527777777777,
+        "brier_top6": 0.1586639222222222,
+        "brier_top10": 0.17017592222222225
+      }
+    ]
+  }
+}
