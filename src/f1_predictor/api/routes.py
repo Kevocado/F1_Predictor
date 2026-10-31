@@ -489,8 +489,9 @@ def _get_session_prediction_live(season: int, round_: int, session_type: str) ->
     now = pd.Timestamp.now(tz="UTC")
     completed = _session_is_completed(season, round_, session_type, race_row, now)
 
+    _session_tier_now = session_state.current_session_tier(race_row)
     sim, tier, source = _cached(
-        f"session_prediction_{session_type}_{season}_{round_}",
+        f"session_prediction_{session_type}_{season}_{round_}_{_session_tier_now}_{completed}",
         lambda: _session_prediction_bundle(season, round_, race_row, session_type, completed),
         ttl=_LIVE_CACHE_TTL_SECONDS,
     )
@@ -701,8 +702,12 @@ def _get_race_prediction_live(season: int, round_: int) -> RacePredictionRespons
     # window the last caller got, which is not necessarily the one these numbers
     # came from — the flag would describe a different run from the one the
     # reader is looking at.
+    # The tier is part of the cache key: a prediction made before
+    # qualifying finished must not be served once qualifying has ended, or the
+    # page keeps showing the pre-qualifying model forever.
+    _race_tier_now = session_state.current_tier(race_row)
     sim, tier, source, coverage = _cached(
-        f"race_prediction_{season}_{round_}",
+        f"race_prediction_{season}_{round_}_{_race_tier_now}_{completed}",
         lambda: _race_prediction_bundle(season, round_, race_row, completed),
         ttl=_LIVE_CACHE_TTL_SECONDS,
     )

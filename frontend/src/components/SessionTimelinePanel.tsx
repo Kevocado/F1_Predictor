@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import type {
   DriverPrediction,
@@ -12,6 +12,7 @@ import type { Signal } from "../predictor-ui";
 import { driverName } from "../lib/teamColors";
 import { HistoryCoverageNote } from "./HistoryCoverageNote";
 import { TierBadge } from "./TierBadge";
+import { isSessionWindow, pollIntervalMs } from "../lib/polling";
 import { TimingTower } from "./TimingTower";
 
 const ALL_SESSIONS: { key: SessionType; label: string }[] = [
@@ -191,6 +192,50 @@ export function SessionTimelinePanel({ season, round, isSprintWeekend, raceDatet
       cancelled = true;
     };
   }, [season, round, selected]);
+
+  // Auto-refresh while the weekend is live: 60s during a session window,
+  // 10 min otherwise, paused when the tab is hidden. Refetch immediately on
+  // visibility change.
+  useEffect(() => {
+    const interval = pollIntervalMs(isSessionWindow(raceDatetime));
+    let id: number | null = null;
+    const start = () => {
+      if (id !== null) return;
+      id = window.setInterval(() => {
+        if (document.hidden) return;
+        setReloadKey((k) => k + 1);
+      }, interval);
+    };
+    const stop = () => {
+      if (id !== null) {
+        window.clearInterval(id);
+        id = null;
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        setReloadKey((k) => k + 1);
+        start();
+      }
+    };
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [season, round, selected, raceDatetime]);
+
+  // Refetch immediately when the model tier changes (e.g. qualifying ends).
+  const prevTierRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (data?.tier && prevTierRef.current && data.tier !== prevTierRef.current) {
+      setReloadKey((k) => k + 1);
+    }
+    prevTierRef.current = data?.tier ?? null;
+  }, [data?.tier]);
 
   // The per-market ledger request (`GET /track-record` ->
   // store.get_session_track_record, which groups by session_type, tier and
